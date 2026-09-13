@@ -1,5 +1,7 @@
 from fastapi import FastAPI
+
 from models.schemas import PromptRequest
+from analyzers.prompt_analyzer import analyze_prompt
 
 app = FastAPI(title="PromptShield AI")
 
@@ -10,7 +12,5 @@ def home():
 
 
 @app.post("/analyze")
-def analyze_prompt(data: PromptRequest):
-    return {
-        "prompt": data.prompt
-    }
+def analyze(data: PromptRequest):
+    return analyze_prompt(data.prompt)
