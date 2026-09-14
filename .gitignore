@@ -1,4 +1,14 @@
+
+# Python
 venv/
 __pycache__/
 *.pyc
+
+# Environment
 .env
+
+# ML artifacts
+*.pkl
+
+# Dataset backups
+*_backup.csv
