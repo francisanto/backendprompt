@@ -56,15 +56,27 @@ def load_app_risk_model() -> Any:
     return _APP_RISK_MODEL
 
 
+from analyzers.security_controls_extractor import (
+    extract_declared_negations,
+    extract_security_controls,
+)
+
+
 def analyze_application_risks(prompt: str) -> Dict[str, Any]:
     """
-    Infers application security risks using the Application Risk Model.
+    Infers potential application security risks using the Application Risk Model,
+    augmented with deterministic extraction of declared security controls and feature negations.
 
     Returns:
         dict:
             - status (str): 'success', 'model_unavailable', or 'error'
-            - detected_risks (list or None): List of predicted risk labels, or None if unavailable/error
-            - risk_count (int or None): Count of detected risks, or None if unavailable/error
+            - detected_risks (list or None): Active predicted risk labels (excluding negated features)
+            - risk_count (int or None): Count of active detected risks
+            - declared_controls (list): Explicitly stated security controls parsed from prompt
+            - declared_negations (list): Explicitly negated features (e.g. 'no database')
+            - suppressed_risks (list): Model predictions suppressed by explicit user negations
+            - mitigated_surfaces (dict): Attack surfaces that have declared security controls
+            - unmitigated_surfaces (list): Attack surfaces with no declared defenses in prompt
             - error (str, optional): Explanatory error message on failure
             - disclaimer (str): Contextual note on machine learning predictions
     """
@@ -78,9 +90,24 @@ def analyze_application_risks(prompt: str) -> Dict[str, Any]:
             "status": "error",
             "detected_risks": None,
             "risk_count": None,
+            "declared_controls": [],
+            "declared_negations": [],
+            "suppressed_risks": [],
+            "mitigated_surfaces": {},
+            "unmitigated_surfaces": [],
             "error": "Prompt cannot be empty or contain only whitespace.",
             "disclaimer": disclaimer
         }
+
+    # Extract declared controls and negations deterministically
+    declared_controls = extract_security_controls(prompt)
+    declared_negations = extract_declared_negations(prompt)
+
+    # Compile set of risks to suppress based on explicit feature negations
+    suppressed_risks_set = set()
+    for neg in declared_negations:
+        for risk in neg.get("suppressed_risks", []):
+            suppressed_risks_set.add(risk)
 
     try:
         model = load_app_risk_model()
@@ -89,15 +116,35 @@ def analyze_application_risks(prompt: str) -> Dict[str, Any]:
             raise ValueError("Loaded model artifact does not contain a valid predictor or pipeline.")
 
         prediction = pipeline.predict([prompt])[0]
-        detected = [
+        raw_detected = [
             label
             for label, value in zip(APP_RISK_LABELS, prediction)
             if value == 1
         ]
+
+        # Active risks exclude any explicitly negated features
+        active_risks = [r for r in raw_detected if r not in suppressed_risks_set]
+        suppressed_active = [r for r in raw_detected if r in suppressed_risks_set]
+
+        # Map declared controls to active attack surfaces
+        mitigated_surfaces: Dict[str, List[str]] = {}
+        for ctrl in declared_controls:
+            for risk in ctrl.get("mitigates_risks", []):
+                if risk in active_risks:
+                    mitigated_surfaces.setdefault(risk, []).append(ctrl["name"])
+
+        unmitigated_surfaces = [r for r in active_risks if r not in mitigated_surfaces]
+
         return {
             "status": "success",
-            "detected_risks": detected,
-            "risk_count": len(detected),
+            "detected_risks": active_risks,
+            "risk_count": len(active_risks),
+            "raw_predictions": raw_detected,
+            "declared_controls": declared_controls,
+            "declared_negations": declared_negations,
+            "suppressed_risks": suppressed_active,
+            "mitigated_surfaces": mitigated_surfaces,
+            "unmitigated_surfaces": unmitigated_surfaces,
             "disclaimer": disclaimer
         }
     except FileNotFoundError as e:
@@ -105,6 +152,11 @@ def analyze_application_risks(prompt: str) -> Dict[str, Any]:
             "status": "model_unavailable",
             "detected_risks": None,
             "risk_count": None,
+            "declared_controls": declared_controls,
+            "declared_negations": declared_negations,
+            "suppressed_risks": [],
+            "mitigated_surfaces": {},
+            "unmitigated_surfaces": [],
             "error": str(e),
             "disclaimer": disclaimer
         }
@@ -113,6 +165,11 @@ def analyze_application_risks(prompt: str) -> Dict[str, Any]:
             "status": "error",
             "detected_risks": None,
             "risk_count": None,
+            "declared_controls": declared_controls,
+            "declared_negations": declared_negations,
+            "suppressed_risks": [],
+            "mitigated_surfaces": {},
+            "unmitigated_surfaces": [],
             "error": f"Application risk inference error: {str(e)}",
             "disclaimer": disclaimer
         }
@@ -193,7 +250,9 @@ def analyze_prompt(prompt: str, analysis_mode: str = "both") -> Dict[str, Any]:
         "errors": errors if errors else None,
         "prompt_security": prompt_sec_result,
         "application_risks": app_risk_result,
-        "sensitive_data": sensitive_data_result
+        "sensitive_data": sensitive_data_result,
+        "declared_controls": app_risk_result.get("declared_controls", []) if isinstance(app_risk_result, dict) else [],
+        "declared_negations": app_risk_result.get("declared_negations", []) if isinstance(app_risk_result, dict) else []
     })
 
     return result

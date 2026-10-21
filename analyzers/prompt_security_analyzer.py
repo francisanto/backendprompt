@@ -79,9 +79,10 @@ def analyze_prompt_security(prompt: str) -> Dict[str, Any]:
         benign_proba = float(proba[0])
         malicious_proba = float(proba[1])
 
+        threshold = float(artifact.get("decision_threshold", 0.5))
         return {
             "status": "success",
-            "is_malicious": bool(malicious_proba >= 0.5),
+            "is_malicious": bool(malicious_proba >= threshold),
             "malicious_probability": round(malicious_proba, 4),
             "benign_probability": round(benign_proba, 4),
             "disclaimer": disclaimer
