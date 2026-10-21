@@ -22,14 +22,15 @@ def get_model_path() -> Path:
 def load_security_model() -> Dict[str, Any]:
     """
     Loads and caches the Prompt Security Model artifact.
+    Raises FileNotFoundError if the artifact is missing.
     """
     global _MODEL_ARTIFACT
     if _MODEL_ARTIFACT is None:
         model_path = get_model_path()
         if not model_path.exists():
             raise FileNotFoundError(
-                f"Prompt Security Model not found at: {model_path}. "
-                "Ensure 'python ml/train_prompt_security_model.py' has been executed."
+                f"Prompt Security Model artifact not found at: {model_path}. "
+                "Train the model using '.venv/bin/python ml/train_prompt_security_model.py'."
             )
         _MODEL_ARTIFACT = joblib.load(model_path)
     return _MODEL_ARTIFACT
@@ -37,20 +38,30 @@ def load_security_model() -> Dict[str, Any]:
 
 def analyze_prompt_security(prompt: str) -> Dict[str, Any]:
     """
-    Analyzes whether an input prompt is benign or malicious.
+    Analyzes whether an input prompt is benign or malicious using the trained Prompt Security Model.
 
     Returns:
         dict:
-            - is_malicious (bool): True if malicious probability >= 0.5, False otherwise
-            - malicious_probability (float): Raw model probability/confidence for malicious class
-            - benign_probability (float): Raw model probability/confidence for benign class
+            - status (str): 'success', 'model_unavailable', or 'error'
+            - is_malicious (bool or None): True if malicious probability >= 0.5, False if benign, None on error/unavailable
+            - malicious_probability (float or None): Raw model probability for malicious class
+            - benign_probability (float or None): Raw model probability for benign class
+            - error (str, optional): Explanatory message when unavailable or failed
+            - disclaimer (str): Scientific context on model predictions
     """
+    disclaimer = (
+        "Statistical classification based on MPDD training distribution. "
+        "Predictions indicate prompt pattern similarity, not conclusive proof of malicious intent."
+    )
+
     if not isinstance(prompt, str) or not prompt.strip():
         return {
-            "is_malicious": False,
-            "malicious_probability": 0.0,
-            "benign_probability": 1.0,
-            "warning": "Empty prompt received"
+            "status": "error",
+            "is_malicious": None,
+            "malicious_probability": None,
+            "benign_probability": None,
+            "error": "Prompt cannot be empty or contain only whitespace.",
+            "disclaimer": disclaimer
         }
 
     try:
@@ -69,14 +80,27 @@ def analyze_prompt_security(prompt: str) -> Dict[str, Any]:
         malicious_proba = float(proba[1])
 
         return {
+            "status": "success",
             "is_malicious": bool(malicious_proba >= 0.5),
             "malicious_probability": round(malicious_proba, 4),
-            "benign_probability": round(benign_proba, 4)
+            "benign_probability": round(benign_proba, 4),
+            "disclaimer": disclaimer
+        }
+    except FileNotFoundError as e:
+        return {
+            "status": "model_unavailable",
+            "is_malicious": None,
+            "malicious_probability": None,
+            "benign_probability": None,
+            "error": str(e),
+            "disclaimer": disclaimer
         }
     except Exception as e:
         return {
-            "is_malicious": False,
-            "malicious_probability": 0.0,
-            "benign_probability": 0.0,
-            "error": f"Prompt security analysis error: {str(e)}"
+            "status": "error",
+            "is_malicious": None,
+            "malicious_probability": None,
+            "benign_probability": None,
+            "error": f"Prompt security inference error: {str(e)}",
+            "disclaimer": disclaimer
         }
