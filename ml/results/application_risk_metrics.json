@@ -1,6 +1,6 @@
 {
   "model_name": "Application Risk Model",
-  "evaluation_date": "2026-10-17T09:04:36.374773+00:00",
+  "evaluation_date": "2026-10-21T05:56:49.707171+00:00",
   "dataset_path": "/Users/francisanto/backend/backendprompt/data/security_risk_dataset.csv",
   "total_dataset_records": 296,
   "train_samples": 236,
@@ -23,14 +23,14 @@
     "ai_tool_risk"
   ],
   "overall_metrics": {
-    "micro_precision": 0.8242,
-    "micro_recall": 0.8152,
-    "micro_f1": 0.8197,
-    "macro_precision": 0.7818,
-    "macro_recall": 0.7738,
-    "macro_f1": 0.7672,
-    "weighted_f1": 0.8238,
-    "hamming_loss": 0.0367
+    "micro_precision": 0.828,
+    "micro_recall": 0.837,
+    "micro_f1": 0.8324,
+    "macro_precision": 0.7783,
+    "macro_recall": 0.7993,
+    "macro_f1": 0.7793,
+    "weighted_f1": 0.8383,
+    "hamming_loss": 0.0344
   },
   "classification_report": {
     "sqli": {
@@ -88,9 +88,9 @@
       "support": 6.0
     },
     "csrf": {
-      "precision": 0.6,
-      "recall": 0.5,
-      "f1-score": 0.5454545454545454,
+      "precision": 0.8,
+      "recall": 0.6666666666666666,
+      "f1-score": 0.7272727272727273,
       "support": 6.0
     },
     "sensitive_data": {
@@ -100,51 +100,51 @@
       "support": 8.0
     },
     "prompt_injection": {
-      "precision": 0.5714285714285714,
-      "recall": 0.6666666666666666,
-      "f1-score": 0.6153846153846154,
+      "precision": 0.625,
+      "recall": 0.8333333333333334,
+      "f1-score": 0.7142857142857143,
       "support": 6.0
     },
     "data_poisoning": {
       "precision": 1.0,
-      "recall": 0.75,
-      "f1-score": 0.8571428571428571,
+      "recall": 1.0,
+      "f1-score": 1.0,
       "support": 4.0
     },
     "model_extraction": {
-      "precision": 1.0,
+      "precision": 0.75,
       "recall": 1.0,
-      "f1-score": 1.0,
+      "f1-score": 0.8571428571428571,
       "support": 3.0
     },
     "ai_tool_risk": {
-      "precision": 0.5555555555555556,
-      "recall": 1.0,
-      "f1-score": 0.7142857142857143,
+      "precision": 0.5,
+      "recall": 0.8,
+      "f1-score": 0.6153846153846154,
       "support": 5.0
     },
     "micro avg": {
-      "precision": 0.8241758241758241,
-      "recall": 0.8152173913043478,
-      "f1-score": 0.819672131147541,
+      "precision": 0.8279569892473119,
+      "recall": 0.8369565217391305,
+      "f1-score": 0.8324324324324325,
       "support": 92.0
     },
     "macro avg": {
-      "precision": 0.7817989417989417,
-      "recall": 0.7737734487734488,
-      "f1-score": 0.7671817071817072,
+      "precision": 0.7783333333333334,
+      "recall": 0.7993290043290044,
+      "f1-score": 0.7793029193029193,
       "support": 92.0
     },
     "weighted avg": {
-      "precision": 0.8534851621808144,
-      "recall": 0.8152173913043478,
-      "f1-score": 0.8238475292823119,
+      "precision": 0.8588509316770185,
+      "recall": 0.8369565217391305,
+      "f1-score": 0.8383330437678265,
       "support": 92.0
     },
     "samples avg": {
-      "precision": 0.7916666666666666,
-      "recall": 0.8666666666666667,
-      "f1-score": 0.8153968253968255,
+      "precision": 0.8013888888888889,
+      "recall": 0.9,
+      "f1-score": 0.8303968253968255,
       "support": 92.0
     }
   },

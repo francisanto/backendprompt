@@ -41,11 +41,13 @@ def predict_prompt(artifact: dict, prompt: str):
     benign_proba = float(proba[0])
     malicious_proba = float(proba[1])
 
-    prediction = "Malicious" if malicious_proba >= 0.5 else "Benign"
+    threshold = float(artifact.get("decision_threshold", 0.5))
+    is_malicious = bool(malicious_proba >= threshold)
+    prediction = "Malicious" if is_malicious else "Benign"
 
     return {
         "prediction": prediction,
-        "is_malicious": malicious_proba >= 0.5,
+        "is_malicious": is_malicious,
         "malicious_probability": malicious_proba,
         "benign_probability": benign_proba
     }

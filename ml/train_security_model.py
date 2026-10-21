@@ -174,6 +174,7 @@ def train_application_risk_model(
             "tfidf",
             TfidfVectorizer(
                 lowercase=True,
+                stop_words="english",
                 ngram_range=(1, 2),
                 max_features=5000
             )
