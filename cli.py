@@ -5,8 +5,9 @@ Unified security analysis and risk assessment platform for prompts.
 
 Evaluates prompts automatically across three integrated layers:
 1. Prompt Security Model: Detects adversarial prompt injection, jailbreaks, and malice.
-2. Application Risk Model: Predicts architectural attack surfaces implied by requested features.
-3. Sensitive Data Detector: Flags hardcoded API keys, secrets, and credentials.
+2. Application Risk Model: Predicts architectural attack surfaces implied by requested features,
+   correlated with explicitly declared security controls and feature negations.
+3. Sensitive Data Detector: Flags hardcoded API keys, secrets, and credentials (rule-based proof).
 """
 
 import argparse
@@ -178,11 +179,12 @@ def mask_sensitive_text(prompt: str) -> str:
 def generate_recommendations(analysis_result: Dict[str, Any]) -> List[Dict[str, str]]:
     """
     Synthesizes targeted, actionable security recommendations based on actual
-    findings from all three analyzers.
+    findings from all three analyzers, distinguishing declared controls from
+    unmitigated risks and decoupling severity from raw model scores.
     """
     recommendations: List[Dict[str, str]] = []
 
-    # 1. Sensitive Data Recommendations
+    # 1. Deterministic Rule-Based Evidence (Sensitive Data Exposure)
     sensitive_data = analysis_result.get("sensitive_data") or {}
     if sensitive_data.get("detected"):
         findings = sensitive_data.get("findings", [])
@@ -199,15 +201,16 @@ def generate_recommendations(analysis_result: Dict[str, Any]) -> List[Dict[str, 
             )
         })
 
-    # 2. Prompt Security Recommendations
+    # 2. Prompt Security Analysis (Adversarial Malice & Injections)
     prompt_sec = analysis_result.get("prompt_security") or {}
     sec_status = prompt_sec.get("status")
 
     if sec_status == "success":
         if prompt_sec.get("is_malicious") is True:
             prob = prompt_sec.get("malicious_probability", 0.0)
+            prio = "HIGH" if prob >= 0.80 else "MEDIUM"
             recommendations.append({
-                "priority": "CRITICAL",
+                "priority": prio,
                 "category": "Prompt Security",
                 "title": f"Mitigate adversarial prompt injection / jailbreak ({prob * 100:.1f}% confidence)",
                 "guidance": (
@@ -238,14 +241,40 @@ def generate_recommendations(analysis_result: Dict[str, Any]) -> List[Dict[str, 
             )
         })
 
-    # 3. Application Risk Recommendations (Architectural Attack Surfaces)
+    # 3. Application Security: Declared Defenses vs. Unmitigated Surfaces
     app_risk = analysis_result.get("application_risks") or {}
     app_status = app_risk.get("status")
 
     if app_status == "success":
         detected_risks = app_risk.get("detected_risks") or []
-        if detected_risks:
-            for risk_label in detected_risks:
+        mitigated_surfaces = app_risk.get("mitigated_surfaces") or {}
+        if "unmitigated_surfaces" in app_risk:
+            unmitigated_surfaces = app_risk.get("unmitigated_surfaces") or []
+        elif "mitigated_surfaces" in app_risk:
+            unmitigated_surfaces = [r for r in detected_risks if r not in mitigated_surfaces]
+        else:
+            unmitigated_surfaces = detected_risks
+        declared_controls = app_risk.get("declared_controls") or []
+
+        # 3A. Surfaces with Declared Defenses (Residual Risk Review)
+        if mitigated_surfaces:
+            for risk_label, controls_list in mitigated_surfaces.items():
+                meta = RISK_METADATA.get(risk_label, {"title": risk_label.replace("_", " ").title()})
+                ctrl_str = ", ".join(controls_list)
+                recommendations.append({
+                    "priority": "DEFENSE-DECLARED",
+                    "category": "Residual Risk Audit",
+                    "title": f"{meta['title']} — Declared Controls Identified ({ctrl_str})",
+                    "guidance": (
+                        f"Prompt specifies defensive controls ({ctrl_str}). Residual risk review: "
+                        "Audit algorithm parameters (e.g., memory/time costs for hashing, session expiration, "
+                        "strict token revocation) during code implementation."
+                    )
+                })
+
+        # 3B. Unmitigated Attack Surfaces
+        if unmitigated_surfaces:
+            for risk_label in unmitigated_surfaces:
                 meta = RISK_METADATA.get(risk_label, {
                     "title": risk_label.replace("_", " ").title(),
                     "recommendation": "Review and harden application implementation for this risk area."
@@ -256,16 +285,19 @@ def generate_recommendations(analysis_result: Dict[str, Any]) -> List[Dict[str, 
                     "title": meta["title"],
                     "guidance": meta["recommendation"]
                 })
-        else:
+
+        # 3C. Informational when no active attack surfaces
+        if not detected_risks:
             recommendations.append({
                 "priority": "INFORMATIONAL",
                 "category": "Application Architecture",
-                "title": "No common attack surfaces detected by baseline model",
+                "title": "No active application attack surfaces detected by baseline model",
                 "guidance": (
-                    "The application description did not trigger common risk categories. Regularly audit your codebase "
-                    "and API endpoints against the OWASP Top 10 as additional features are introduced."
+                    "The application description does not trigger common risk categories or explicitly negates them. "
+                    "Regularly audit your codebase against the OWASP Top 10 as additional features are introduced."
                 )
             })
+
     elif app_status in {"model_unavailable", "error"}:
         recommendations.append({
             "priority": "HIGH",
@@ -303,7 +335,7 @@ def format_security_report(
 ) -> str:
     """
     Formats the complete PromptShield AI unified security report.
-    Integrates Prompt Security, Application Risks, and Sensitive Data findings.
+    Integrates Prompt Security, Application Risks, Declared Controls, and Sensitive Data.
     """
     if colors is None:
         colors = Colors(enabled=False)
@@ -344,7 +376,7 @@ def format_security_report(
         ben_prob = prompt_sec.get("benign_probability", 0.0)
 
         if is_mal:
-            verdict_badge = f"{colors.BOLD}{colors.RED}[ MALICIOUS ]{colors.RESET}"
+            verdict_badge = f"{colors.BOLD}{colors.RED}[ ADVERSARIAL / MALICIOUS ]{colors.RESET}"
         else:
             verdict_badge = f"{colors.BOLD}{colors.GREEN}[ BENIGN ]{colors.RESET}"
 
@@ -368,27 +400,52 @@ def format_security_report(
         if prompt_sec.get("error"):
             lines.append(f"      Error: {prompt_sec['error']}")
 
-    # Section 2: Application Attack Surfaces
+    # Section 2: Application Attack Surfaces & Declared Controls
     app_risk = analysis_result.get("application_risks") or {}
     app_status = app_risk.get("status", "unknown")
 
     lines.append(f"\n{subrule}")
-    lines.append(f"{colors.BOLD}2. APPLICATION ATTACK SURFACES (Architectural Risk Assessment){colors.RESET}")
+    lines.append(f"{colors.BOLD}2. APPLICATION ATTACK SURFACES & SECURITY CONTROLS (Architectural Evaluation){colors.RESET}")
     lines.append(subrule)
 
     if app_status == "success":
+        declared_controls = app_risk.get("declared_controls") or []
+        declared_negations = app_risk.get("declared_negations") or []
+        suppressed_risks = app_risk.get("suppressed_risks") or []
         detected_risks = app_risk.get("detected_risks") or []
-        lines.append(f"  Analyzer Status:       {colors.GREEN}SUCCESS{colors.RESET}")
-        lines.append(f"  Identified Surfaces:   {len(detected_risks)} detected")
+        mitigated_surfaces = app_risk.get("mitigated_surfaces") or {}
+        unmitigated_surfaces = app_risk.get("unmitigated_surfaces") or []
 
+        # 2A. Explicitly Stated Security Controls
+        lines.append(f"  {colors.BOLD}Explicitly Stated Security Controls:{colors.RESET}")
+        if declared_controls:
+            for ctrl in declared_controls:
+                lines.append(f"    {colors.GREEN}[✓]{colors.RESET} {colors.BOLD}{ctrl['name']}{colors.RESET} (Matched: \"{ctrl['matched_text']}\")")
+                lines.append(f"        {colors.DIM}{ctrl['description']}{colors.RESET}")
+        else:
+            lines.append(f"    {colors.DIM}None explicitly stated in prompt.{colors.RESET}")
+
+        # 2B. Declared Feature Negations
+        if declared_negations:
+            lines.append(f"\n  {colors.BOLD}Declared Feature Negations (Excluded Attack Surfaces):{colors.RESET}")
+            for neg in declared_negations:
+                lines.append(f"    {colors.CYAN}[i]{colors.RESET} Excluded: {colors.BOLD}{neg['feature']}{colors.RESET} — \"{neg['matched_text']}\"")
+            if suppressed_risks:
+                lines.append(f"    {colors.DIM}Suppressed model risk predictions: {', '.join(suppressed_risks)}{colors.RESET}")
+
+        # 2C. Model Predicted Potential Attack Surfaces
+        lines.append(f"\n  {colors.BOLD}Predicted Potential Attack Surfaces ({len(detected_risks)} active):{colors.RESET}")
         if detected_risks:
-            lines.append(f"  Potential Attack Surfaces Identified:")
             for risk in detected_risks:
                 meta = RISK_METADATA.get(risk, {"title": risk, "description": "Application attack surface"})
-                lines.append(f"    {colors.YELLOW}[!]{colors.RESET} {colors.BOLD}{risk:<18}{colors.RESET} — {meta['title']}")
+                if risk in mitigated_surfaces:
+                    ctrls_str = ", ".join(mitigated_surfaces[risk])
+                    lines.append(f"    {colors.GREEN}[✓]{colors.RESET} {colors.BOLD}{risk:<18}{colors.RESET} — {meta['title']} {colors.GREEN}[Declared Controls: {ctrls_str}]{colors.RESET}")
+                else:
+                    lines.append(f"    {colors.YELLOW}[!]{colors.RESET} {colors.BOLD}{risk:<18}{colors.RESET} — {meta['title']} {colors.YELLOW}[No Declared Defenses]{colors.RESET}")
                 lines.append(f"        {colors.DIM}{meta['description']}{colors.RESET}")
         else:
-            lines.append(f"  {colors.GREEN}✓ No standard application attack surfaces detected by baseline model.{colors.RESET}")
+            lines.append(f"    {colors.GREEN}✓ No active application attack surfaces detected by baseline model.{colors.RESET}")
 
         lines.append("")
         lines.append(f"  {colors.CYAN}[i] IMPORTANT ARCHITECTURAL DISTINCTION:{colors.RESET}")
@@ -417,11 +474,11 @@ def format_security_report(
     findings = sensitive_data.get("findings", [])
 
     lines.append(f"\n{subrule}")
-    lines.append(f"{colors.BOLD}3. SENSITIVE DATA & CREDENTIAL EXPOSURE DETECTION{colors.RESET}")
+    lines.append(f"{colors.BOLD}3. SENSITIVE DATA & CREDENTIAL EXPOSURE DETECTION (Deterministic Rule Evidence){colors.RESET}")
     lines.append(subrule)
 
     if has_sensitive:
-        badge = f"{colors.BOLD}{colors.RED}[ EXPOSURE DETECTED ]{colors.RESET}"
+        badge = f"{colors.BOLD}{colors.RED}[ EXPOSURE DETECTED — EMPIRICAL EVIDENCE ]{colors.RESET}"
         lines.append(f"  Status:                {badge}")
         lines.append(f"  Findings Count:        {len(findings)}")
         lines.append("  Detected Sensitive Strings (Redacted):")
@@ -441,7 +498,7 @@ def format_security_report(
     recommendations = generate_recommendations(analysis_result)
 
     lines.append(f"\n{subrule}")
-    lines.append(f"{colors.BOLD}4. ACTIONABLE SECURITY RECOMMENDATIONS{colors.RESET}")
+    lines.append(f"{colors.BOLD}4. ACTIONABLE SECURITY RECOMMENDATIONS & RESIDUAL RISK REVIEW{colors.RESET}")
     lines.append(subrule)
 
     if recommendations:
@@ -451,6 +508,8 @@ def format_security_report(
                 prio_str = f"{colors.BOLD}{colors.RED}[CRITICAL]{colors.RESET}"
             elif prio == "HIGH":
                 prio_str = f"{colors.BOLD}{colors.YELLOW}[HIGH]{colors.RESET}"
+            elif prio in {"MEDIUM", "DEFENSE-DECLARED"}:
+                prio_str = f"{colors.BOLD}{colors.BLUE}[DEFENSE-DECLARED]{colors.RESET}"
             else:
                 prio_str = f"{colors.BOLD}{colors.CYAN}[INFO]{colors.RESET}"
 
@@ -523,10 +582,11 @@ def show_prompt_improvement_notice(colors: Colors) -> None:
     print("=" * 80)
     print(f"  {colors.YELLOW}[!] Feature Status: Scheduled for future development phase.{colors.RESET}")
     print("\n  Currently Implemented Capabilities in PromptShield AI:")
-    print(f"    {colors.GREEN}✓{colors.RESET} Prompt Security Model (Binary Adversarial / Malice Classification)")
+    print(f"    {colors.GREEN}✓{colors.RESET} Calibrated Prompt Security Model (Adversarial / Malice Classification)")
     print(f"    {colors.GREEN}✓{colors.RESET} Application Risk Assessment (15 Multi-label Architectural Risks)")
+    print(f"    {colors.GREEN}✓{colors.RESET} Security Controls & Constraints Extractor (Argon2id, CSP, RBAC, etc.)")
     print(f"    {colors.GREEN}✓{colors.RESET} Sensitive Data Detection (Credentials, API Keys, Private Keys)")
-    print(f"    {colors.GREEN}✓{colors.RESET} Actionable Security Remediation Engine")
+    print(f"    {colors.GREEN}✓{colors.RESET} Decoupled Severity & Actionable Remediation Engine")
     print(f"    {colors.GREEN}✓{colors.RESET} Unified FastAPI REST Endpoints & Terminal CLI")
     print("\n  Planned Future Modules:")
     print(f"    {colors.DIM}• Automated Prompt Rewriting & Hardening")
