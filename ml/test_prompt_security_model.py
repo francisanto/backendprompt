@@ -86,8 +86,8 @@ def run_tests():
         prompt = case["prompt"]
         proba = pipeline.predict_proba([prompt])[0]
         benign_proba = float(proba[0])
-        malicious_proba = float(proba[1])
-        prediction = "Malicious" if malicious_proba >= 0.5 else "Benign"
+        threshold = float(artifact.get("decision_threshold", 0.5))
+        prediction = "Malicious" if malicious_proba >= threshold else "Benign"
 
         print(f"\n[Test Case {case['id']}] {case['category']}")
         print(f"Prompt: \"{prompt}\"")
