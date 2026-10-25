@@ -1,0 +1,95 @@
+"""
+PromptShield AI — Model Suitability Assessor.
+============================================
+Evaluates the architectural suitability of a foundation model for a specific prompt
+based on extracted prompt features, predicted task category, and model capabilities.
+Produces a normalized suitability score in [0.0, 1.0].
+"""
+
+from typing import Dict, List
+from analyzers.model_comparison.registry import ModelMetadata
+from analyzers.model_comparison.feature_extractor import PromptFeatures
+
+
+def calculate_suitability(
+    model: ModelMetadata,
+    features: PromptFeatures,
+    predicted_task: str,
+    task_confidence: float
+) -> float:
+    """
+    Computes a multi-factor suitability score in [0.0, 1.0].
+    Factors:
+    1. Task Alignment: Does the model possess capabilities matching the predicted task?
+    2. Code Aptitude: If prompt is code-heavy or technical engineering, how capable is the model?
+    3. Complexity Fit: Does the model's tier match the complexity level of the prompt?
+    4. Context Headroom: Is the prompt well within the model's safe operational window?
+    """
+    capabilities = set(model.capabilities)
+
+    # 1. Base Task Alignment Score (0.0 to 1.0)
+    if predicted_task in capabilities:
+        task_score = 0.88 + (0.12 * task_confidence)
+    elif "general_instruction" in capabilities:
+        task_score = 0.70
+    else:
+        task_score = 0.55
+
+    # 2. Engineering & Code Aptitude
+    is_coding_task = (
+        predicted_task == "code_generation"
+        or features.code_proportion > 0.25
+        or features.technical_keyword_density > 0.40
+    )
+    if is_coding_task:
+        if model.model_id == "claude-3-5-sonnet":
+            code_score = 0.98
+        elif model.model_id == "gpt-4o":
+            code_score = 0.95
+        elif model.model_id in ["gemini-1.5-pro", "gpt-4-turbo"]:
+            code_score = 0.91
+        elif model.model_id == "gemini-2.0-flash":
+            code_score = 0.86
+        elif model.model_id == "claude-3-5-haiku":
+            code_score = 0.85
+        elif model.model_id == "claude-3-opus":
+            code_score = 0.84
+        elif model.model_id == "gpt-4o-mini":
+            code_score = 0.78
+        else:
+            code_score = 0.70
+    else:
+        code_score = 0.80
+
+    # 3. Complexity Matching Score
+    is_flagship = model.model_id in ["claude-3-5-sonnet", "gpt-4o", "gemini-1.5-pro", "claude-3-opus", "gpt-4-turbo"]
+    is_lightweight = model.model_id in ["gpt-4o-mini", "gemini-1.5-flash", "gemini-2.0-flash", "claude-3-5-haiku"]
+
+    if features.complexity_score >= 0.40:
+        complexity_fit = 0.96 if is_flagship else 0.74
+    elif features.complexity_score <= 0.25:
+        complexity_fit = 0.95 if is_lightweight else 0.80
+    else:
+        complexity_fit = 0.90 if is_flagship else 0.85
+
+    # 4. Context Headroom Score
+    total_tokens = features.word_count * 1.35 + features.estimated_output_tokens
+    utilization_ratio = total_tokens / max(1, model.context_window_tokens)
+    if utilization_ratio > 0.90:
+        context_score = 0.20  # Risk of overflow
+    elif utilization_ratio > 0.50:
+        context_score = 0.70
+    elif model.context_window_tokens >= 1_000_000 and total_tokens > 10_000:
+        context_score = 0.98  # Massive context advantage for Gemini on huge inputs
+    else:
+        context_score = 0.90
+
+    # Weighted blend
+    suitability = (
+        (task_score * 0.35) +
+        (code_score * 0.35) +
+        (complexity_fit * 0.20) +
+        (context_score * 0.10)
+    )
+
+    return round(float(min(1.0, max(0.1, suitability))), 3)
