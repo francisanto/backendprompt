@@ -9,7 +9,7 @@ GPT, Gemini, and Claude foundation models without external API calls.
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from analyzers.model_comparison.registry import ModelMetadata, registry
+from analyzers.model_comparison.registry import ModelMetadata, registry, LifecycleStatus
 from analyzers.model_comparison.tokenizer_adapters import get_tokenizer_adapter
 from analyzers.model_comparison.feature_extractor import PromptFeatures, feature_extractor
 from analyzers.model_comparison.task_classifier import TaskClassificationResult, task_classifier
@@ -20,7 +20,8 @@ from analyzers.model_comparison.ranker import (
     RankedModel,
     RankingMethod,
     RankingPreset,
-    rank_models
+    rank_models,
+    validate_and_normalize_weights
 )
 
 
@@ -31,7 +32,7 @@ class ModelComparisonDetails:
     provider: str
     context_window_tokens: int
     token_count: int
-    token_count_method: str  # "exact", "estimated"
+    token_count_method: str  # "exact", "estimated", "unsupported"
     is_exact_token_count: bool
     estimated_output_tokens: int
     cost_breakdown: CostBreakdown
@@ -39,6 +40,9 @@ class ModelComparisonDetails:
     capabilities: List[str]
     strengths: List[str]
     provenance: Dict[str, str]
+    lifecycle_status: str = "active"
+    source_url: str = ""
+    verification_date: str = "2025-02-15"
 
 
 @dataclass
@@ -69,8 +73,13 @@ class ModelComparisonEngine:
         preset: RankingPreset = RankingPreset.BALANCED,
         custom_weights: Optional[Dict[str, float]] = None,
         model_ids: Optional[List[str]] = None,
-        output_tokens_override: Optional[int] = None
+        output_tokens_override: Optional[int] = None,
+        include_deprecated: bool = False
     ) -> ModelComparisonReport:
+        """
+        Runs local prompt analysis, feature extraction, token counting, costing,
+        and ranking across foundation models.
+        """
         # 1. Feature Extraction
         features = self.feature_extractor.extract_features(prompt)
         output_tokens = output_tokens_override or features.estimated_output_tokens
@@ -79,13 +88,19 @@ class ModelComparisonEngine:
         task_res = self.task_classifier.classify_task(prompt)
 
         # 3. Model Selection
-        all_models = self.registry.list_models()
+        # Single consistent registry snapshot for the entire request
         if model_ids:
-            target_models = [m for m in all_models if m.model_id in model_ids]
+            target_models = []
+            for mid in model_ids:
+                m = self.registry.get_model(mid)
+                if m:
+                    target_models.append(m)
+            # If none matched, fallback to eligible models
             if not target_models:
-                target_models = all_models
+                target_models = self.registry.list_models(include_deprecated=include_deprecated)
         else:
-            target_models = all_models
+            # Default recommendation pool: excludes deprecated/retired models unless requested
+            target_models = self.registry.list_models(include_deprecated=include_deprecated)
 
         # 4. Token Counting, Cost Calculation, and Suitability Scoring
         candidates: List[CandidateEvaluation] = []
@@ -105,7 +120,8 @@ class ModelComparisonEngine:
                 model=model,
                 features=features,
                 predicted_task=task_res.predicted_category,
-                task_confidence=task_res.confidence
+                task_confidence=task_res.confidence,
+                task_result=task_res
             )
 
             candidates.append(CandidateEvaluation(
@@ -119,8 +135,13 @@ class ModelComparisonEngine:
                 input_cost_usd=cost.input_cost_usd,
                 output_cost_usd=cost.output_cost_usd,
                 context_window_tokens=model.context_window_tokens,
+                lifecycle_status=model.lifecycle_status.value if hasattr(model.lifecycle_status, "value") else str(model.lifecycle_status),
                 latency_ms=None,  # Offline engine does not invent live latency
-                pricing_date=cost.pricing_effective_date
+                pricing_date=cost.pricing_effective_date,
+                pricing_status=cost.pricing_status,
+                estimated_output_tokens=output_tokens,
+                input_cost_per_m=model.pricing.input_cost_per_m,
+                output_cost_per_m=model.pricing.output_cost_per_m
             ))
 
             details_map[model.model_id] = ModelComparisonDetails(
@@ -138,13 +159,17 @@ class ModelComparisonEngine:
                 strengths=model.strengths,
                 provenance={
                     "token_count": "exact_local_bpe" if tok_res.is_exact else "calibrated_offline_estimate",
-                    "input_cost": "calculated_from_token_count_and_published_pricing",
-                    "output_cost": "estimated_from_heuristic_response_length_and_published_pricing",
-                    "task_category": "predicted_by_local_ml_model",
-                    "suitability_score": "heuristically_predicted_from_features_and_task",
+                    "input_cost": "calculated_from_token_count_and_published_pricing" if cost.pricing_status == "known" else "unknown_unverified",
+                    "output_cost": "estimated_from_heuristic_response_length_and_published_pricing" if cost.pricing_status == "known" else "unknown_unverified",
+                    "task_category": f"predicted_by_local_ml_model (confidence: {task_res.confidence})",
+                    "suitability_score": "heuristically_predicted_from_structural_features_and_task_alignment",
                     "latency": "unavailable (not measured or fabricated offline)",
-                    "external_benchmark_scores": "unavailable (not fabricated offline)"
-                }
+                    "external_benchmark_scores": "unavailable (not fabricated offline)",
+                    "billing_note": tok_res.billing_disclaimer
+                },
+                lifecycle_status=model.lifecycle_status.value if hasattr(model.lifecycle_status, "value") else str(model.lifecycle_status),
+                source_url=model.source_url,
+                verification_date=model.verification_date
             )
 
         # 5. Multi-Criteria Ranking
@@ -155,9 +180,7 @@ class ModelComparisonEngine:
             custom_weights=custom_weights
         )
 
-        # Effective weights
-        from analyzers.model_comparison.ranker import PRESET_WEIGHTS
-        effective_weights = custom_weights or PRESET_WEIGHTS.get(preset, PRESET_WEIGHTS[RankingPreset.BALANCED])
+        effective_weights = validate_and_normalize_weights(custom_weights, preset)
 
         return ModelComparisonReport(
             prompt_text=prompt,
@@ -171,8 +194,9 @@ class ModelComparisonEngine:
             provenance_declarations={
                 "offline_execution": "100% local execution; zero prompts transmitted to external model APIs.",
                 "token_counting": "OpenAI token counts are exact via official tiktoken; Gemini and Claude token counts are calibrated offline estimates.",
-                "pricing_data": "Public pricing snapshot dated 2024-10-01 (USD per 1M tokens).",
-                "benchmarks": "No third-party quality benchmarks or live latencies are fabricated."
+                "pricing_data": "Public pricing snapshot verified against official documentation (Feb 2025; USD per 1M tokens).",
+                "benchmarks": "No third-party quality benchmarks or live latencies are fabricated.",
+                "scoring_interpretation": "Scores represent relative multi-criteria trade-off rankings under selected preset, not absolute correctness probabilities."
             }
         )
 

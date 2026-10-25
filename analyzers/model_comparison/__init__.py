@@ -5,7 +5,7 @@ Local foundation model comparison, token analysis, cost estimation,
 and multi-criteria ranking (WSM/TOPSIS) without external API dependencies.
 """
 
-from analyzers.model_comparison.registry import ModelMetadata, ModelPricing, registry
+from analyzers.model_comparison.registry import ModelMetadata, ModelPricing, LifecycleStatus, registry
 from analyzers.model_comparison.tokenizer_adapters import (
     BaseTokenizerAdapter,
     OpenAITokenizerAdapter,
@@ -38,6 +38,7 @@ from analyzers.model_comparison.engine import (
 __all__ = [
     "ModelMetadata",
     "ModelPricing",
+    "LifecycleStatus",
     "registry",
     "BaseTokenizerAdapter",
     "OpenAITokenizerAdapter",

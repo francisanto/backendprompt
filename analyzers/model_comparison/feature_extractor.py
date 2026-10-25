@@ -140,9 +140,20 @@ class PromptFeatureExtractor:
         for pat in self.SECURITY_PATTERNS:
             sec_hits += len(re.findall(pat, text, re.I))
         # High sensitivity if API keys or credentials pattern matches
-        cred_match = bool(re.search(r"(?i)\b(api[_-]?key|secret|token|password)\s*[:=]", text))
+        try:
+            from analyzers.sensitive_data_detector import detect_sensitive_data
+            sens_res = detect_sensitive_data(text)
+            cred_match = sens_res.get("detected", False)
+        except Exception:
+            cred_match = False
+
+        if not cred_match:
+            cred_match = bool(re.search(r"(?i)\b(api[_-]?key|secret|token|password)\s*[:=]", text))
+
         sec_score = min(1.0, (sec_hits * 0.2) + (0.5 if cred_match else 0.0))
         security_sensitivity = round(sec_score, 3)
+        if cred_match:
+            indicators.append("contains_sensitive_credentials")
         if security_sensitivity > 0.3:
             indicators.append("security_sensitive")
 

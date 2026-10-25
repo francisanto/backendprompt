@@ -4,15 +4,24 @@ PromptShield AI — Local Tokenizer Adapters.
 Provides local, offline token counting adapters for supported foundation models:
 1. OpenAI / GPT: Uses official `tiktoken` (MIT) with o200k_base or cl100k_base. (Exact count)
 2. Google / Gemini: Calibrated local SentencePiece estimation matching Gemini 256k vocab. (Estimated count)
-3. Anthropic / Claude: Calibrated local estimation. (Estimated count; Anthropic provides no offline tokenizer package).
+3. Anthropic / Claude: Calibrated local estimation matching Claude BPE distribution. (Estimated count)
 
 Strictly distinguishes exact measurements from estimates and never claims cross-provider equivalency.
+Explicitly discloses that raw prompt tokenization does not represent final API billing due to system
+prompts, tool definitions, chat formatting wrappers, and provider caching policies.
 """
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 import re
 from typing import Optional
+
+
+BILLING_DISCLAIMER = (
+    "Raw text token count for prompt text only. Production API billing will vary based on "
+    "system instructions, tool declarations, message framing overhead, and provider-specific "
+    "caching or tier discounts."
+)
 
 
 @dataclass
@@ -22,6 +31,7 @@ class TokenCountResult:
     tokenizer_name: str
     is_exact: bool
     notes: Optional[str] = None
+    billing_disclaimer: str = BILLING_DISCLAIMER
 
 
 class BaseTokenizerAdapter(ABC):
@@ -40,7 +50,7 @@ class BaseTokenizerAdapter(ABC):
 class OpenAITokenizerAdapter(BaseTokenizerAdapter):
     """
     Offline tokenizer adapter for OpenAI GPT models using official tiktoken.
-    Provides 100% exact local token counts for plain text without network calls.
+    Provides 100% exact local token counts for plain text and code without network calls.
     """
 
     def __init__(self, model_id: str, encoding_name: str = "o200k_base"):
@@ -58,17 +68,18 @@ class OpenAITokenizerAdapter(BaseTokenizerAdapter):
         return self._encoding
 
     def count_tokens(self, text: str) -> TokenCountResult:
-        if not text:
+        if not text or not text.strip():
             return TokenCountResult(
                 token_count=0,
                 method="exact",
                 tokenizer_name=self.tokenizer_name,
                 is_exact=True,
-                notes="Zero tokens for empty string."
+                notes="Zero tokens for empty or whitespace-only input."
             )
 
         try:
             encoding = self._get_encoding()
+            # Allow all special tokens in raw input string without throwing errors
             tokens = encoding.encode(text, disallowed_special=())
             count = len(tokens)
             return TokenCountResult(
@@ -87,7 +98,7 @@ class OpenAITokenizerAdapter(BaseTokenizerAdapter):
                 method="estimated",
                 tokenizer_name=self.tokenizer_name,
                 is_exact=False,
-                notes=f"Fallback estimation due to tokenizer error: {e}"
+                notes=f"Fallback character-ratio estimation due to local encoding error: {e}"
             )
 
 
@@ -103,27 +114,26 @@ class GeminiTokenizerAdapter(BaseTokenizerAdapter):
         super().__init__(model_id=model_id, tokenizer_name="gemini_256k_bpe_calibrated")
 
     def count_tokens(self, text: str) -> TokenCountResult:
-        if not text:
+        if not text or not text.strip():
             return TokenCountResult(
                 token_count=0,
                 method="estimated",
                 tokenizer_name=self.tokenizer_name,
                 is_exact=False,
-                notes="Zero tokens for empty string."
+                notes="Zero tokens for empty or whitespace-only input."
             )
 
-        # Calibrated heuristic against Gemini 256k vocab:
-        # Code segments typically average ~3.4-3.7 chars/token; prose ~4.0-4.3 chars/token.
-        is_code = bool(re.search(r"```|def |class |function|import |<[a-z]+>|SELECT |WHERE ", text))
-        char_ratio = 3.6 if is_code else 4.15
+        # Calibrated heuristic against Gemini 256k SentencePiece vocab:
+        # Code segments average ~3.4-3.7 chars/token; English prose averages ~4.0-4.3 chars/token.
+        is_code = bool(re.search(r"```|def |class |function|import |<[a-z]+>|SELECT |WHERE |[{};]", text))
+        char_ratio = 3.60 if is_code else 4.15
 
         char_len = len(text)
         word_len = len(text.split())
 
-        # Blend character and whitespace word heuristics
         char_est = char_len / char_ratio
         word_est = word_len * (1.25 if is_code else 1.30)
-        est = max(1, int(round((char_est * 0.7) + (word_est * 0.3))))
+        est = max(1, int(round((char_est * 0.70) + (word_est * 0.30))))
 
         return TokenCountResult(
             token_count=est,
@@ -132,7 +142,7 @@ class GeminiTokenizerAdapter(BaseTokenizerAdapter):
             is_exact=False,
             notes=(
                 "Estimated using calibrated Gemini 256k SentencePiece heuristic. "
-                "Google provides no offline open-source tokenizer package; exact counts require live API."
+                "Google provides no local offline tokenizer package; official exact counts require live API."
             )
         )
 
@@ -149,19 +159,19 @@ class ClaudeTokenizerAdapter(BaseTokenizerAdapter):
         super().__init__(model_id=model_id, tokenizer_name="claude_calibrated_heuristic")
 
     def count_tokens(self, text: str) -> TokenCountResult:
-        if not text:
+        if not text or not text.strip():
             return TokenCountResult(
                 token_count=0,
                 method="estimated",
                 tokenizer_name=self.tokenizer_name,
                 is_exact=False,
-                notes="Zero tokens for empty string."
+                notes="Zero tokens for empty or whitespace-only input."
             )
 
         # Calibrated heuristic for Claude 3/3.5 token distribution:
         # Code segments average ~3.5 chars/token; English prose averages ~3.9-4.0 chars/token.
-        is_code = bool(re.search(r"```|def |class |function|import |<[a-z]+>|SELECT |WHERE ", text))
-        char_ratio = 3.5 if is_code else 3.95
+        is_code = bool(re.search(r"```|def |class |function|import |<[a-z]+>|SELECT |WHERE |[{};]", text))
+        char_ratio = 3.50 if is_code else 3.95
 
         char_len = len(text)
         word_len = len(text.split())
@@ -177,8 +187,29 @@ class ClaudeTokenizerAdapter(BaseTokenizerAdapter):
             is_exact=False,
             notes=(
                 "Estimated using calibrated Claude 3.5 heuristic. "
-                "Anthropic does not release an offline local tokenizer library."
+                "Anthropic does not publish an open-source offline tokenizer package."
             )
+        )
+
+
+class UnsupportedTokenizerAdapter(BaseTokenizerAdapter):
+    """
+    Fallback adapter for unknown or unsupported model architectures.
+    Explicitly declares that tokens could not be counted or estimated reliably.
+    """
+
+    def __init__(self, model_id: str):
+        super().__init__(model_id=model_id, tokenizer_name="unsupported")
+
+    def count_tokens(self, text: str) -> TokenCountResult:
+        chars = len(text) if text else 0
+        est = max(0, int(chars / 4.0)) if chars > 0 else 0
+        return TokenCountResult(
+            token_count=est,
+            method="unsupported",
+            tokenizer_name=self.tokenizer_name,
+            is_exact=False,
+            notes=f"Model architecture '{self.model_id}' lacks a dedicated tokenizer adapter; character heuristic used."
         )
 
 
@@ -188,12 +219,11 @@ def get_tokenizer_adapter(model_id: str) -> BaseTokenizerAdapter:
     """
     low = model_id.lower()
     if "gpt" in low or "o1" in low or "o3" in low:
-        encoding = "o200k_base" if ("4o" in low or "o1" in low) else "cl100k_base"
+        encoding = "o200k_base" if ("4o" in low or "o1" in low or "o3" in low) else "cl100k_base"
         return OpenAITokenizerAdapter(model_id=model_id, encoding_name=encoding)
     elif "gemini" in low:
         return GeminiTokenizerAdapter(model_id=model_id)
     elif "claude" in low:
         return ClaudeTokenizerAdapter(model_id=model_id)
     else:
-        # Default fallback
-        return GeminiTokenizerAdapter(model_id=model_id)
+        return UnsupportedTokenizerAdapter(model_id=model_id)
