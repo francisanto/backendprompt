@@ -62,11 +62,15 @@ class ModelComparisonRequest(BaseModel):
     )
     models: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of specific model IDs to compare (default: all registered models)"
+        description="Optional list of specific model IDs to compare (default: active registered models)"
     )
     expected_output_tokens: Optional[int] = Field(
         default=None,
         description="Optional manual override for expected response length in tokens"
+    )
+    include_deprecated: Optional[bool] = Field(
+        default=False,
+        description="Whether to include deprecated or retired models in comparison pool"
     )
 
     @field_validator("prompt")
@@ -80,13 +84,14 @@ class ModelComparisonRequest(BaseModel):
 class CostBreakdownSchema(BaseModel):
     input_tokens: int
     estimated_output_tokens: int
-    input_cost_usd: float
-    output_cost_usd: float
-    total_estimated_cost_usd: float
-    input_cost_per_m: float
-    output_cost_per_m: float
+    input_cost_usd: Optional[float] = None
+    output_cost_usd: Optional[float] = None
+    total_estimated_cost_usd: Optional[float] = None
+    input_cost_per_m: Optional[float] = None
+    output_cost_per_m: Optional[float] = None
     pricing_effective_date: str
     currency: str = "USD"
+    pricing_status: str = "known"
 
 
 class ModelComparisonItemSchema(BaseModel):
@@ -103,6 +108,9 @@ class ModelComparisonItemSchema(BaseModel):
     capabilities: List[str]
     strengths: List[str]
     provenance: Dict[str, str]
+    lifecycle_status: str = "active"
+    source_url: Optional[str] = ""
+    verification_date: Optional[str] = ""
 
 
 class RankedModelSchema(BaseModel):
@@ -112,12 +120,13 @@ class RankedModelSchema(BaseModel):
     provider: str
     score: float
     suitability_score: float
-    estimated_cost_usd: float
+    estimated_cost_usd: Optional[float] = None
     token_count: int
     token_count_provenance: str
     latency_status: str
     benchmark_status: str
     reasoning: str
+    lifecycle_status: str = "active"
 
 
 class PromptFeaturesSchema(BaseModel):
@@ -138,6 +147,9 @@ class TaskClassificationSchema(BaseModel):
     confidence: float
     category_probabilities: Dict[str, float]
     model_source: str
+    is_low_confidence: Optional[bool] = False
+    top_categories: Optional[List[str]] = None
+    confidence_status: Optional[str] = "confident"
 
 
 class ModelComparisonResponse(BaseModel):
@@ -160,11 +172,15 @@ class ModelMetadataSchema(BaseModel):
     family: str
     context_window_tokens: int
     max_output_tokens: int
-    input_cost_per_m: float
-    output_cost_per_m: float
+    input_cost_per_m: Optional[float] = None
+    output_cost_per_m: Optional[float] = None
     pricing_effective_date: str
     currency: str
     tokenizer_name: str
     capabilities: List[str]
     strengths: List[str]
     description: str
+    lifecycle_status: str = "active"
+    source_url: Optional[str] = ""
+    verification_date: Optional[str] = ""
+    deprecation_date: Optional[str] = None
