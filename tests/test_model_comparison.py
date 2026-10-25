@@ -1,13 +1,15 @@
 """
 PromptShield AI — Test Suite for Local Model Comparison Engine.
 ==============================================================
-Tests model registry, local tokenizer adapters, feature extraction,
-local task classification, cost calculations, suitability scoring,
-WSM and TOPSIS ranking algorithms, provenance compliance, and FastAPI endpoints.
+Tests model registry, lifecycle eligibility, local tokenizer adapters,
+feature extraction, local task classification, cost calculations, suitability
+scoring, WSM and TOPSIS ranking algorithms, degenerate cases, provenance compliance,
+and FastAPI endpoints.
 """
 
-import sys
+import math
 from pathlib import Path
+import sys
 
 # Add project root to sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -20,6 +22,9 @@ from fastapi.testclient import TestClient
 from main import app
 from analyzers.model_comparison import (
     registry,
+    LifecycleStatus,
+    ModelPricing,
+    ModelMetadata,
     get_tokenizer_adapter,
     OpenAITokenizerAdapter,
     GeminiTokenizerAdapter,
@@ -33,6 +38,13 @@ from analyzers.model_comparison import (
     rank_models,
     comparison_engine
 )
+from analyzers.model_comparison.ranker import (
+    CandidateEvaluation,
+    validate_and_normalize_weights,
+    rank_models_weighted_sum,
+    rank_models_topsis
+)
+from analyzers.model_comparison.tokenizer_adapters import UnsupportedTokenizerAdapter
 
 
 @pytest.fixture
@@ -41,36 +53,60 @@ def client():
 
 
 # ---------------------------------------------------------------------------
-# 1. Model Registry Tests
+# 1. Model Registry & Lifecycle Tests
 # ---------------------------------------------------------------------------
 
-def test_model_registry_coverage():
-    models = registry.list_models()
-    assert len(models) >= 9, f"Expected at least 9 models, found {len(models)}"
+def test_model_registry_coverage_and_lifecycle():
+    # 1. Default recommendation pool excludes deprecated/retired models
+    active_models = registry.list_models(include_deprecated=False)
+    assert len(active_models) >= 8, f"Expected at least 8 active models, found {len(active_models)}"
+    assert all(m.lifecycle_status in {LifecycleStatus.ACTIVE, LifecycleStatus.PREVIEW} for m in active_models)
 
-    providers = {m.provider for m in models}
+    # 2. Including deprecated/retired exposes full catalogue
+    all_models = registry.list_models(include_deprecated=True)
+    assert len(all_models) >= 10, f"Expected at least 10 total models, found {len(all_models)}"
+
+    providers = {m.provider for m in all_models}
     assert "openai" in providers
     assert "google" in providers
     assert "anthropic" in providers
 
+    # 3. Active models have verified URLs and context
     gpt4o = registry.get_model("gpt-4o")
     assert gpt4o is not None
+    assert gpt4o.lifecycle_status == LifecycleStatus.ACTIVE
     assert gpt4o.context_window_tokens == 128_000
     assert gpt4o.pricing.input_cost_per_m == 2.50
     assert gpt4o.pricing.output_cost_per_m == 10.00
     assert gpt4o.tokenizer_name == "o200k_base"
+    assert "platform.openai.com" in gpt4o.source_url
 
     gemini_pro = registry.get_model("gemini-1.5-pro")
     assert gemini_pro is not None
+    assert gemini_pro.lifecycle_status == LifecycleStatus.ACTIVE
     assert gemini_pro.context_window_tokens == 2_000_000
+    assert "ai.google.dev" in gemini_pro.source_url
 
     claude_sonnet = registry.get_model("claude-3-5-sonnet")
     assert claude_sonnet is not None
+    assert claude_sonnet.lifecycle_status == LifecycleStatus.ACTIVE
     assert claude_sonnet.context_window_tokens == 200_000
+    assert "docs.anthropic.com" in claude_sonnet.source_url
+
+    # 4. Check deprecated and retired entries
+    gpt4_turbo = registry.get_model("gpt-4-turbo")
+    assert gpt4_turbo is not None
+    assert gpt4_turbo.lifecycle_status == LifecycleStatus.DEPRECATED
+    assert gpt4_turbo.deprecation_date is not None
+
+    gpt35 = registry.get_model("gpt-3.5-turbo")
+    assert gpt35 is not None
+    assert gpt35.lifecycle_status == LifecycleStatus.RETIRED
+    assert registry.is_model_eligible("gpt-3.5-turbo") is False
 
 
 # ---------------------------------------------------------------------------
-# 2. Local Tokenizer Adapters Tests (Identical Prompts)
+# 2. Local Tokenizer Adapters Tests (Identical Prompts & Edge Cases)
 # ---------------------------------------------------------------------------
 
 def test_tokenizer_adapters_identical_prompts():
@@ -92,20 +128,43 @@ def test_tokenizer_adapters_identical_prompts():
     assert res_openai.method == "exact"
     assert res_openai.tokenizer_name == "o200k_base"
     assert 15 <= res_openai.token_count <= 30
+    assert "tiktoken" in res_openai.notes.lower()
+    assert len(res_openai.billing_disclaimer) > 0
 
     # 2. Gemini must be explicitly estimated
     assert res_gemini.is_exact is False
     assert res_gemini.method == "estimated"
     assert 15 <= res_gemini.token_count <= 35
+    assert "calibrated" in res_gemini.notes.lower()
 
     # 3. Claude must be explicitly estimated
     assert res_claude.is_exact is False
     assert res_claude.method == "estimated"
     assert 15 <= res_claude.token_count <= 35
+    assert "calibrated" in res_claude.notes.lower()
 
-    # 4. Empty text handling
-    empty_res = openai_tok.count_tokens("")
-    assert empty_res.token_count == 0
+
+def test_tokenizer_adapters_edge_cases():
+    openai_tok = get_tokenizer_adapter("gpt-4o")
+    gemini_tok = get_tokenizer_adapter("gemini-1.5-pro")
+
+    # Empty and whitespace prompts
+    for tok in [openai_tok, gemini_tok]:
+        assert tok.count_tokens("").token_count == 0
+        assert tok.count_tokens("   \n\t  ").token_count == 0
+
+    # Unicode text
+    unicode_prompt = "PromptShield AI: 🛡️ Análisis de Seguridad y Optimización (こんにちは)"
+    res_u = openai_tok.count_tokens(unicode_prompt)
+    assert res_u.token_count > 5
+    assert res_u.is_exact is True
+
+    # Unknown architecture adapter fallback
+    unknown_tok = get_tokenizer_adapter("custom-llama-xyz")
+    assert isinstance(unknown_tok, UnsupportedTokenizerAdapter)
+    res_unk = unknown_tok.count_tokens("Some test text")
+    assert res_unk.method == "unsupported"
+    assert res_unk.is_exact is False
 
 
 # ---------------------------------------------------------------------------
@@ -167,10 +226,11 @@ def test_local_task_classifier_domains():
         ]
         assert res.confidence > 0.0
         assert sum(res.category_probabilities.values()) == pytest.approx(1.0, abs=0.01)
+        assert res.confidence_status in ["confident", "marginal", "low"]
 
 
 # ---------------------------------------------------------------------------
-# 5. Cost Calculator Tests
+# 5. Cost Calculator Tests (Known & Missing Pricing)
 # ---------------------------------------------------------------------------
 
 def test_cost_calculation():
@@ -186,11 +246,45 @@ def test_cost_calculation():
     assert cost.output_cost_usd == pytest.approx(0.0050, abs=1e-6)
     assert cost.total_estimated_cost_usd == pytest.approx(0.0075, abs=1e-6)
     assert cost.currency == "USD"
-    assert cost.pricing_effective_date == "2024-10-01"
+    assert cost.pricing_status == "known"
+
+    # Missing pricing handling
+    unpriced_model = ModelMetadata(
+        model_id="unpriced-model",
+        display_name="Unpriced Model",
+        provider="custom",
+        family="custom",
+        context_window_tokens=32000,
+        max_output_tokens=4096,
+        pricing=ModelPricing(input_cost_per_m=None, output_cost_per_m=None, is_known=False),
+        tokenizer_name="custom"
+    )
+    cost_unpriced = calculate_model_cost(unpriced_model, input_tokens=1000, estimated_output_tokens=500)
+    assert cost_unpriced.pricing_status == "unknown"
+    assert cost_unpriced.total_estimated_cost_usd is None
+    assert cost_unpriced.input_cost_usd is None
 
 
 # ---------------------------------------------------------------------------
-# 6. Ranking Engine Tests (WSM & TOPSIS Identical Prompts)
+# 6. Weight Validation Tests
+# ---------------------------------------------------------------------------
+
+def test_weight_validation_and_normalization():
+    # Negative weights clamped to zero
+    w_bad = {"suitability": -0.5, "cost": 1.0, "context": 0.0}
+    w_clean = validate_and_normalize_weights(w_bad)
+    assert w_clean["suitability"] == 0.0
+    assert w_clean["cost"] == 1.0
+    assert sum(w_clean.values()) == pytest.approx(1.0, abs=1e-4)
+
+    # Empty or zero sum falls back to preset defaults
+    w_empty = validate_and_normalize_weights({})
+    assert sum(w_empty.values()) == pytest.approx(1.0, abs=1e-4)
+    assert w_empty["suitability"] > 0
+
+
+# ---------------------------------------------------------------------------
+# 7. Ranking Engine Tests (WSM & TOPSIS Identical Prompts)
 # ---------------------------------------------------------------------------
 
 def test_ranking_weighted_sum_and_topsis():
@@ -204,7 +298,8 @@ def test_ranking_weighted_sum_and_topsis():
     )
 
     assert report_wsm.ranking_method == "weighted_sum"
-    assert len(report_wsm.ranked_models) == len(registry.list_models())
+    # By default, evaluates active models (at least 8)
+    assert len(report_wsm.ranked_models) >= 8
 
     # Verify strictly monotonic ranks: 1, 2, ..., N
     ranks_wsm = [r.rank for r in report_wsm.ranked_models]
@@ -233,7 +328,7 @@ def test_ranking_weighted_sum_and_topsis():
         prompt=test_prompt,
         preset=RankingPreset.COST_OPTIMIZED
     )
-    # The top model in cost_optimized should be a low-cost model (e.g. gpt-4o-mini or gemini-1.5-flash)
+    # The top model in cost_optimized should be a low-cost model
     top_cost_model = report_cost.ranked_models[0].model_id
     assert top_cost_model in ["gpt-4o-mini", "gemini-1.5-flash", "claude-3-5-haiku", "gemini-2.0-flash"]
 
@@ -246,8 +341,58 @@ def test_ranking_weighted_sum_and_topsis():
     assert top_quality_model in ["claude-3-5-sonnet", "gpt-4o", "gemini-1.5-pro", "claude-3-opus"]
 
 
+def test_ranking_degenerate_cases():
+    # 1. Single candidate ranking
+    single_candidate = [
+        CandidateEvaluation(
+            model_id="gpt-4o",
+            display_name="OpenAI GPT-4o",
+            provider="openai",
+            token_count=100,
+            token_count_method="exact",
+            suitability_score=0.90,
+            total_cost_usd=0.001,
+            input_cost_usd=0.0005,
+            output_cost_usd=0.0005,
+            context_window_tokens=128000
+        )
+    ]
+    ranked_single_wsm = rank_models_weighted_sum(single_candidate, {"suitability": 1.0})
+    assert len(ranked_single_wsm) == 1
+    assert ranked_single_wsm[0].rank == 1
+    assert ranked_single_wsm[0].score == 1.0
+
+    ranked_single_topsis = rank_models_topsis(single_candidate, {"suitability": 1.0})
+    assert len(ranked_single_topsis) == 1
+    assert ranked_single_topsis[0].rank == 1
+    assert ranked_single_topsis[0].score == 1.0
+
+    # 2. Identical criteria across candidates in TOPSIS (zero range)
+    identical_candidates = [
+        CandidateEvaluation(
+            model_id=f"model-{i}",
+            display_name=f"Model {i}",
+            provider="test",
+            token_count=100,
+            token_count_method="exact",
+            suitability_score=0.80,
+            total_cost_usd=0.001,
+            input_cost_usd=0.0005,
+            output_cost_usd=0.0005,
+            context_window_tokens=128000
+        )
+        for i in range(3)
+    ]
+    ranked_ident = rank_models_topsis(identical_candidates, {"suitability": 0.5, "cost": 0.5})
+    assert len(ranked_ident) == 3
+    # All scores should be finite non-NaN numbers
+    for r in ranked_ident:
+        assert not math.isnan(r.score)
+        assert 0.0 <= r.score <= 1.0
+
+
 # ---------------------------------------------------------------------------
-# 7. Provenance & Non-Fabrication Tests
+# 8. Provenance & Non-Fabrication Tests
 # ---------------------------------------------------------------------------
 
 def test_provenance_and_no_fabricated_metrics():
@@ -273,17 +418,36 @@ def test_provenance_and_no_fabricated_metrics():
 
 
 # ---------------------------------------------------------------------------
-# 8. FastAPI Endpoints Tests
+# 9. FastAPI Endpoints Tests
 # ---------------------------------------------------------------------------
 
 def test_fastapi_models_endpoint(client):
+    # 1. Default /models exposes active eligible models
     res = client.get("/models")
     assert res.status_code == 200
     data = res.json()
     assert isinstance(data, list)
-    assert len(data) >= 9
+    assert len(data) >= 8
+    assert all(m["lifecycle_status"] in ["active", "preview"] for m in data)
 
-    # Filter by provider
+    # 2. Querying with include_deprecated=true exposes full catalogue
+    res_all = client.get("/models?include_deprecated=true")
+    assert res_all.status_code == 200
+    data_all = res_all.json()
+    assert len(data_all) >= 10
+
+    # 3. Filtering by specific lifecycle status
+    res_dep = client.get("/models?status=deprecated")
+    assert res_dep.status_code == 200
+    data_dep = res_dep.json()
+    assert len(data_dep) >= 1
+    assert all(m["lifecycle_status"] == "deprecated" for m in data_dep)
+
+    # 4. Invalid status returns 400
+    res_bad = client.get("/models?status=invalid_status_xyz")
+    assert res_bad.status_code == 400
+
+    # 5. Filter by provider
     res_openai = client.get("/models?provider=openai")
     assert res_openai.status_code == 200
     data_openai = res_openai.json()
@@ -296,6 +460,13 @@ def test_fastapi_get_specific_model(client):
     data = res.json()
     assert data["model_id"] == "gpt-4o"
     assert data["context_window_tokens"] == 128_000
+    assert data["lifecycle_status"] == "active"
+    assert data["source_url"] != ""
+
+    # Deprecated model can still be retrieved by ID
+    res_dep = client.get("/models/gpt-4-turbo")
+    assert res_dep.status_code == 200
+    assert res_dep.json()["lifecycle_status"] == "deprecated"
 
     # Nonexistent model 404
     res_404 = client.get("/models/fake-model-xyz")
@@ -317,7 +488,8 @@ def test_fastapi_compare_models_endpoint(client):
     assert "prompt_features" in data
     assert "task_classification" in data
     assert "ranked_models" in data
-    assert len(data["ranked_models"]) >= 9
+    # Active models evaluated by default (at least 8)
+    assert len(data["ranked_models"]) >= 8
     assert data["ranked_models"][0]["rank"] == 1
 
     # TOPSIS with specific models filter
