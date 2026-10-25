@@ -5,21 +5,27 @@ from models.schemas import (
     PromptRequest,
     ModelComparisonRequest,
     ModelComparisonResponse,
-    ModelMetadataSchema
+    ModelMetadataSchema,
+    ProductCategoryEnum
 )
 from analyzers.prompt_analyzer import analyze_prompt
 from analyzers.model_comparison import (
     comparison_engine,
     registry,
     RankingMethod,
-    RankingPreset
+    RankingPreset,
+    ProductCategory,
+    LifecycleStatus,
+    ProductAvailability,
+    ModelMetadata,
+    IDEProductMetadata,
+    AppBuilderMetadata
 )
-from analyzers.model_comparison.registry import LifecycleStatus
 
 app = FastAPI(
     title="PromptShield AI",
-    description="Multi-model AI security analysis and local model-comparison backend evaluating prompt injection, application risks, token costs, and model suitability.",
-    version="1.1.0"
+    description="Multi-model AI security analysis and local model/product comparison backend evaluating prompt injection, application risks, token costs, model suitability, and AI coding assistants.",
+    version="1.2.0"
 )
 
 
@@ -35,172 +41,338 @@ def analyze(data: PromptRequest):
 
 
 # ---------------------------------------------------------------------------
-# Model Comparison & Ranking Endpoints
+# Multi-Category Comparison & Catalogue Endpoints
 # ---------------------------------------------------------------------------
 
 @app.get("/models", response_model=List[ModelMetadataSchema])
 def list_models(
-    provider: Optional[str] = Query(None, description="Filter by provider: openai, google, anthropic"),
-    include_deprecated: bool = Query(False, description="Whether to include deprecated or retired models (default: False)"),
-    status: Optional[str] = Query(None, description="Filter by specific lifecycle status: active, deprecated, retired, preview, unverified")
+    category: Optional[str] = Query(None, description="Filter by category: 'foundation_model', 'ide_assistant', or 'app_builder' (default: foundation_model)"),
+    provider: Optional[str] = Query(None, description="Filter by provider or vendor: openai, google, anthropic, xai, anysphere, codeium, vercel, etc."),
+    include_deprecated: bool = Query(False, description="Whether to include deprecated or retired items (default: False)"),
+    status: Optional[str] = Query(None, description="Filter by specific lifecycle status or product availability")
 ):
     """
-    Returns registered foundation models, context windows, tokenizer specs, lifecycle status,
-    and dated pricing. By default, only active/eligible models are exposed.
+    Returns registered systems across Foundation Models, IDEs, or AI App Builders.
+    By default (category=None), returns active foundation models for backward compatibility.
     """
-    lifecycle_enum = None
-    if status:
-        try:
-            lifecycle_enum = LifecycleStatus(status.lower())
-        except ValueError:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid status '{status}'. Valid values: active, deprecated, retired, preview, unverified."
-            )
+    cat_str = (category or "foundation_model").lower().strip()
 
-    models = registry.list_models(
-        provider=provider,
-        include_deprecated=include_deprecated,
-        lifecycle_status=lifecycle_enum
-    )
+    if cat_str in {"foundation_model", "model", "models"}:
+        lifecycle_enum = None
+        if status:
+            try:
+                lifecycle_enum = LifecycleStatus(status.lower())
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status '{status}'. Valid values for foundation models: active, deprecated, retired, preview, unverified."
+                )
 
-    return [
-        ModelMetadataSchema(
-            model_id=m.model_id,
-            display_name=m.display_name,
-            provider=m.provider,
-            family=m.family,
-            context_window_tokens=m.context_window_tokens,
-            max_output_tokens=m.max_output_tokens,
-            input_cost_per_m=m.pricing.input_cost_per_m,
-            output_cost_per_m=m.pricing.output_cost_per_m,
-            pricing_effective_date=m.pricing.pricing_effective_date,
-            currency=m.pricing.currency,
-            tokenizer_name=m.tokenizer_name,
-            capabilities=m.capabilities,
-            strengths=m.strengths,
-            description=m.description,
-            lifecycle_status=m.lifecycle_status.value if hasattr(m.lifecycle_status, "value") else str(m.lifecycle_status),
-            source_url=m.source_url,
-            verification_date=m.verification_date,
-            deprecation_date=m.deprecation_date
+        models = registry.list_models(
+            provider=provider,
+            include_deprecated=include_deprecated,
+            lifecycle_status=lifecycle_enum
         )
-        for m in models
-    ]
+
+        return [
+            ModelMetadataSchema(
+                model_id=m.model_id,
+                display_name=m.display_name,
+                provider=m.provider,
+                family=m.family,
+                category="foundation_model",
+                context_window_tokens=m.context_window_tokens,
+                max_output_tokens=m.max_output_tokens,
+                input_cost_per_m=m.pricing.input_cost_per_m,
+                output_cost_per_m=m.pricing.output_cost_per_m,
+                pricing_effective_date=m.pricing.pricing_effective_date,
+                currency=m.pricing.currency,
+                tokenizer_name=m.tokenizer_name,
+                capabilities=m.capabilities,
+                strengths=m.strengths,
+                description=m.description,
+                lifecycle_status=m.lifecycle_status.value if hasattr(m.lifecycle_status, "value") else str(m.lifecycle_status),
+                source_url=m.source_url,
+                verification_date=m.verification_date,
+                deprecation_date=m.deprecation_date,
+                replacement_model_id=m.replacement_model_id
+            )
+            for m in models
+        ]
+
+    elif cat_str in {"ide_assistant", "ide", "ides"}:
+        ides = registry.list_ides(include_discontinued=include_deprecated)
+        if provider:
+            ides = [i for i in ides if provider.lower() in i.vendor.lower()]
+        if status:
+            ides = [i for i in ides if i.availability.value == status.lower()]
+
+        return [
+            ModelMetadataSchema(
+                model_id=i.product_id,
+                display_name=i.display_name,
+                provider=i.vendor,
+                family="ide_assistant",
+                category="ide_assistant",
+                description=i.description,
+                capabilities=i.key_capabilities,
+                strengths=i.context_features,
+                lifecycle_status=i.availability.value,
+                source_url=i.source_url,
+                verification_date=i.verification_date,
+                pricing_tier_summary=i.pricing_tier_summary,
+                supported_options=i.supported_models
+            )
+            for i in ides
+        ]
+
+    elif cat_str in {"app_builder", "builder", "builders"}:
+        builders = registry.list_app_builders(include_discontinued=include_deprecated)
+        if provider:
+            builders = [b for b in builders if provider.lower() in b.vendor.lower()]
+        if status:
+            builders = [b for b in builders if b.availability.value == status.lower()]
+
+        return [
+            ModelMetadataSchema(
+                model_id=b.product_id,
+                display_name=b.display_name,
+                provider=b.vendor,
+                family="app_builder",
+                category="app_builder",
+                description=b.description,
+                capabilities=b.key_capabilities,
+                strengths=b.primary_stacks,
+                lifecycle_status=b.availability.value,
+                source_url=b.source_url,
+                verification_date=b.verification_date,
+                pricing_tier_summary=b.pricing_tier_summary,
+                supported_options=b.supported_backends
+            )
+            for b in builders
+        ]
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid category '{category}'. Valid categories: 'foundation_model', 'ide_assistant', 'app_builder'."
+        )
 
 
 @app.get("/models/{model_id}", response_model=ModelMetadataSchema)
 def get_model(model_id: str):
     """
-    Returns metadata, lifecycle status, and pricing for a specific registered model ID.
-    Supports querying both active and historical/deprecated models by ID.
+    Returns metadata, lifecycle/availability status, and specifications for a registered item.
+    Supports querying across foundation models (e.g. 'gpt-4o', 'gemini-2.5-pro'),
+    IDEs (e.g. 'cursor', 'windsurf'), and app builders (e.g. 'v0-dev', 'lovable-dev').
     """
-    m = registry.get_model(model_id)
-    if not m:
+    item = registry.get_model(model_id)
+    if not item:
         raise HTTPException(
             status_code=404,
-            detail=f"Model '{model_id}' not found in registry. Check /models for registered model IDs."
+            detail=f"Item '{model_id}' not found in registry. Check /models for registered IDs."
         )
-    return ModelMetadataSchema(
-        model_id=m.model_id,
-        display_name=m.display_name,
-        provider=m.provider,
-        family=m.family,
-        context_window_tokens=m.context_window_tokens,
-        max_output_tokens=m.max_output_tokens,
-        input_cost_per_m=m.pricing.input_cost_per_m,
-        output_cost_per_m=m.pricing.output_cost_per_m,
-        pricing_effective_date=m.pricing.pricing_effective_date,
-        currency=m.pricing.currency,
-        tokenizer_name=m.tokenizer_name,
-        capabilities=m.capabilities,
-        strengths=m.strengths,
-        description=m.description,
-        lifecycle_status=m.lifecycle_status.value if hasattr(m.lifecycle_status, "value") else str(m.lifecycle_status),
-        source_url=m.source_url,
-        verification_date=m.verification_date,
-        deprecation_date=m.deprecation_date
-    )
+
+    if isinstance(item, ModelMetadata):
+        return ModelMetadataSchema(
+            model_id=item.model_id,
+            display_name=item.display_name,
+            provider=item.provider,
+            family=item.family,
+            category="foundation_model",
+            context_window_tokens=item.context_window_tokens,
+            max_output_tokens=item.max_output_tokens,
+            input_cost_per_m=item.pricing.input_cost_per_m,
+            output_cost_per_m=item.pricing.output_cost_per_m,
+            pricing_effective_date=item.pricing.pricing_effective_date,
+            currency=item.pricing.currency,
+            tokenizer_name=item.tokenizer_name,
+            capabilities=item.capabilities,
+            strengths=item.strengths,
+            description=item.description,
+            lifecycle_status=item.lifecycle_status.value if hasattr(item.lifecycle_status, "value") else str(item.lifecycle_status),
+            source_url=item.source_url,
+            verification_date=item.verification_date,
+            deprecation_date=item.deprecation_date,
+            replacement_model_id=item.replacement_model_id
+        )
+    elif isinstance(item, IDEProductMetadata):
+        return ModelMetadataSchema(
+            model_id=item.product_id,
+            display_name=item.display_name,
+            provider=item.vendor,
+            family="ide_assistant",
+            category="ide_assistant",
+            description=item.description,
+            capabilities=item.key_capabilities,
+            strengths=item.context_features,
+            lifecycle_status=item.availability.value,
+            source_url=item.source_url,
+            verification_date=item.verification_date,
+            pricing_tier_summary=item.pricing_tier_summary,
+            supported_options=item.supported_models
+        )
+    elif isinstance(item, AppBuilderMetadata):
+        return ModelMetadataSchema(
+            model_id=item.product_id,
+            display_name=item.display_name,
+            provider=item.vendor,
+            family="app_builder",
+            category="app_builder",
+            description=item.description,
+            capabilities=item.key_capabilities,
+            strengths=item.primary_stacks,
+            lifecycle_status=item.availability.value,
+            source_url=item.source_url,
+            verification_date=item.verification_date,
+            pricing_tier_summary=item.pricing_tier_summary,
+            supported_options=item.supported_backends
+        )
+    else:
+        raise HTTPException(status_code=500, detail="Unexpected metadata item type.")
 
 
 @app.post("/compare-models", response_model=ModelComparisonResponse)
 def compare_models_endpoint(req: ModelComparisonRequest):
     """
-    Evaluates a prompt across registered foundation models (GPT, Gemini, Claude).
-    Calculates exact/calibrated token counts, input/output costs, suitability, and
-    multi-criteria WSM / TOPSIS ranking without making external API calls.
-    Does not transmit user prompts to third-party model generation APIs.
+    Evaluates a prompt across registered candidates for the selected product category:
+    - 'foundation_model': token counts, costs, suitability, and multi-criteria WSM / TOPSIS ranking.
+    - 'ide_assistant': multi-file agentic capabilities, codebase indexing, terminal execution, and privacy.
+    - 'app_builder': full-stack backend, database/auth support, UI generation, and code exportability.
+    Executes 100% offline without transmitting prompts to external model or builder APIs.
     """
+    cat_val = req.category.value if hasattr(req.category, "value") else str(req.category)
     method_val = req.method.value if hasattr(req.method, "value") else str(req.method)
     preset_val = req.preset.value if hasattr(req.preset, "value") else str(req.preset)
 
-    method = RankingMethod(method_val)
-    preset = RankingPreset(preset_val)
+    try:
+        category = ProductCategory(cat_val)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported category '{cat_val}'. Valid: foundation_model, ide_assistant, app_builder."
+        )
+
+    try:
+        method = RankingMethod(method_val)
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported ranking method '{method_val}'. Valid: weighted_sum, topsis."
+        )
 
     report = comparison_engine.compare_prompt(
         prompt=req.prompt,
+        category=category,
         method=method,
-        preset=preset,
+        preset=preset_val,
         custom_weights=req.custom_weights,
         model_ids=req.models,
         output_tokens_override=req.expected_output_tokens,
         include_deprecated=bool(req.include_deprecated)
     )
 
-    # Convert dataclasses to dicts matching Pydantic response schema
+    # 1. Format foundation model details if applicable
     model_details_dict = {}
-    for mid, d in report.model_details.items():
-        model_details_dict[mid] = {
-            "model_id": d.model_id,
-            "display_name": d.display_name,
-            "provider": d.provider,
-            "context_window_tokens": d.context_window_tokens,
-            "token_count": d.token_count,
-            "token_count_method": d.token_count_method,
-            "is_exact_token_count": d.is_exact_token_count,
-            "estimated_output_tokens": d.estimated_output_tokens,
-            "cost_breakdown": {
-                "input_tokens": d.cost_breakdown.input_tokens,
-                "estimated_output_tokens": d.cost_breakdown.estimated_output_tokens,
-                "input_cost_usd": d.cost_breakdown.input_cost_usd,
-                "output_cost_usd": d.cost_breakdown.output_cost_usd,
-                "total_estimated_cost_usd": d.cost_breakdown.total_estimated_cost_usd,
-                "input_cost_per_m": d.cost_breakdown.input_cost_per_m,
-                "output_cost_per_m": d.cost_breakdown.output_cost_per_m,
-                "pricing_effective_date": d.cost_breakdown.pricing_effective_date,
-                "currency": d.cost_breakdown.currency,
-                "pricing_status": d.cost_breakdown.pricing_status
-            },
-            "suitability_score": d.suitability_score,
-            "capabilities": d.capabilities,
-            "strengths": d.strengths,
-            "provenance": d.provenance,
-            "lifecycle_status": d.lifecycle_status,
-            "source_url": d.source_url,
-            "verification_date": d.verification_date
-        }
+    if report.model_details:
+        for mid, d in report.model_details.items():
+            model_details_dict[mid] = {
+                "model_id": d.model_id,
+                "display_name": d.display_name,
+                "provider": d.provider,
+                "context_window_tokens": d.context_window_tokens,
+                "token_count": d.token_count,
+                "token_count_method": d.token_count_method,
+                "is_exact_token_count": d.is_exact_token_count,
+                "estimated_output_tokens": d.estimated_output_tokens,
+                "cost_breakdown": {
+                    "input_tokens": d.cost_breakdown.input_tokens,
+                    "estimated_output_tokens": d.cost_breakdown.estimated_output_tokens,
+                    "input_cost_usd": d.cost_breakdown.input_cost_usd,
+                    "output_cost_usd": d.cost_breakdown.output_cost_usd,
+                    "total_estimated_cost_usd": d.cost_breakdown.total_estimated_cost_usd,
+                    "input_cost_per_m": d.cost_breakdown.input_cost_per_m,
+                    "output_cost_per_m": d.cost_breakdown.output_cost_per_m,
+                    "pricing_effective_date": d.cost_breakdown.pricing_effective_date,
+                    "currency": d.cost_breakdown.currency,
+                    "pricing_status": d.cost_breakdown.pricing_status
+                },
+                "suitability_score": d.suitability_score,
+                "capabilities": d.capabilities,
+                "strengths": d.strengths,
+                "provenance": d.provenance,
+                "lifecycle_status": d.lifecycle_status,
+                "source_url": d.source_url,
+                "verification_date": d.verification_date
+            }
 
-    ranked_models_list = [
-        {
-            "rank": rm.rank,
-            "model_id": rm.model_id,
-            "display_name": rm.display_name,
-            "provider": rm.provider,
-            "score": rm.score,
-            "suitability_score": rm.suitability_score,
-            "estimated_cost_usd": rm.estimated_cost_usd,
-            "token_count": rm.token_count,
-            "token_count_provenance": rm.token_count_provenance,
-            "latency_status": rm.latency_status,
-            "benchmark_status": rm.benchmark_status,
-            "reasoning": rm.reasoning,
-            "lifecycle_status": rm.lifecycle_status
-        }
-        for rm in report.ranked_models
-    ]
+    ranked_models_list = []
+    if report.ranked_models:
+        for rm in report.ranked_models:
+            ranked_models_list.append({
+                "rank": rm.rank,
+                "model_id": rm.model_id,
+                "display_name": rm.display_name,
+                "provider": rm.provider,
+                "score": rm.score,
+                "suitability_score": rm.suitability_score,
+                "estimated_cost_usd": rm.estimated_cost_usd,
+                "token_count": rm.token_count,
+                "token_count_provenance": rm.token_count_provenance,
+                "latency_status": rm.latency_status,
+                "benchmark_status": rm.benchmark_status,
+                "reasoning": rm.reasoning,
+                "lifecycle_status": rm.lifecycle_status
+            })
+
+    # 2. Format product details if applicable
+    product_details_dict = None
+    if report.product_details:
+        product_details_dict = {}
+        for pid, pd in report.product_details.items():
+            product_details_dict[pid] = {
+                "product_id": pd.product_id,
+                "display_name": pd.display_name,
+                "vendor": pd.vendor,
+                "category": pd.category,
+                "availability": pd.availability,
+                "pricing_tier_summary": pd.pricing_tier_summary,
+                "pricing_model": pd.pricing_model,
+                "free_tier": pd.free_tier,
+                "paid_tiers": pd.paid_tiers,
+                "key_capabilities": pd.key_capabilities,
+                "context_or_stack_details": pd.context_or_stack_details,
+                "privacy_or_limitations": pd.privacy_or_limitations,
+                "description": pd.description,
+                "source_url": pd.source_url,
+                "verification_date": pd.verification_date,
+                "provenance": pd.provenance
+            }
+
+    ranked_products_list = None
+    if report.ranked_products:
+        ranked_products_list = [
+            {
+                "rank": rp.rank,
+                "product_id": rp.product_id,
+                "display_name": rp.display_name,
+                "vendor": rp.vendor,
+                "category": rp.category,
+                "score": rp.score,
+                "availability": rp.availability,
+                "pricing_summary": rp.pricing_summary,
+                "key_strengths": rp.key_strengths,
+                "reasoning": rp.reasoning,
+                "supported_models_or_stacks": rp.supported_models_or_stacks,
+                "source_url": rp.source_url,
+                "verification_date": rp.verification_date
+            }
+            for rp in report.ranked_products
+        ]
 
     return {
         "status": "success",
+        "category": report.category,
         "prompt_text": report.prompt_text,
         "prompt_features": {
             "char_length": report.prompt_features.char_length,
@@ -228,5 +400,7 @@ def compare_models_endpoint(req: ModelComparisonRequest):
         "applied_weights": report.applied_weights,
         "ranked_models": ranked_models_list,
         "model_details": model_details_dict,
+        "ranked_products": ranked_products_list,
+        "product_details": product_details_dict,
         "provenance_declarations": report.provenance_declarations
     }

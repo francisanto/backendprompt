@@ -28,8 +28,14 @@ class PromptRequest(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Model Comparison Schemas
+# Model & Product Comparison Schemas
 # ---------------------------------------------------------------------------
+
+class ProductCategoryEnum(str, Enum):
+    FOUNDATION_MODEL = "foundation_model"
+    IDE_ASSISTANT = "ide_assistant"
+    APP_BUILDER = "app_builder"
+
 
 class RankingMethodEnum(str, Enum):
     WEIGHTED_SUM = "weighted_sum"
@@ -46,31 +52,35 @@ class RankingPresetEnum(str, Enum):
 class ModelComparisonRequest(BaseModel):
     prompt: str = Field(
         ...,
-        description="The prompt text to analyze and evaluate across models"
+        description="The prompt text to analyze and evaluate"
+    )
+    category: Optional[ProductCategoryEnum] = Field(
+        default=ProductCategoryEnum.FOUNDATION_MODEL,
+        description="Product category to compare: 'foundation_model', 'ide_assistant', or 'app_builder'"
     )
     method: Optional[RankingMethodEnum] = Field(
         default=RankingMethodEnum.WEIGHTED_SUM,
         description="Ranking methodology: 'weighted_sum' or 'topsis'"
     )
-    preset: Optional[RankingPresetEnum] = Field(
-        default=RankingPresetEnum.BALANCED,
-        description="Objective weighting preset: 'balanced', 'cost_optimized', 'quality_optimized', or 'long_context'"
+    preset: Optional[str] = Field(
+        default="balanced",
+        description="Weighting preset (e.g. 'balanced', 'cost_optimized', 'quality_optimized', 'agentic_power', 'full_stack')"
     )
     custom_weights: Optional[Dict[str, float]] = Field(
         default=None,
-        description="Optional custom weights for ranking criteria (suitability, cost, context)"
+        description="Optional custom weights for ranking criteria"
     )
     models: Optional[List[str]] = Field(
         default=None,
-        description="Optional list of specific model IDs to compare (default: active registered models)"
+        description="Optional list of specific model or product IDs to compare"
     )
     expected_output_tokens: Optional[int] = Field(
         default=None,
-        description="Optional manual override for expected response length in tokens"
+        description="Optional manual override for expected response length in tokens (for foundation models)"
     )
     include_deprecated: Optional[bool] = Field(
         default=False,
-        description="Whether to include deprecated or retired models in comparison pool"
+        description="Whether to include deprecated, retired, or discontinued items in comparison pool"
     )
 
     @field_validator("prompt")
@@ -108,7 +118,7 @@ class ModelComparisonItemSchema(BaseModel):
     capabilities: List[str]
     strengths: List[str]
     provenance: Dict[str, str]
-    lifecycle_status: str = "active"
+    lifecycle_status: str
     source_url: Optional[str] = ""
     verification_date: Optional[str] = ""
 
@@ -126,7 +136,42 @@ class RankedModelSchema(BaseModel):
     latency_status: str
     benchmark_status: str
     reasoning: str
-    lifecycle_status: str = "active"
+    lifecycle_status: str
+
+
+class RankedProductSchema(BaseModel):
+    rank: int
+    product_id: str
+    display_name: str
+    vendor: str
+    category: str
+    score: float
+    availability: str
+    pricing_summary: str
+    key_strengths: List[str]
+    reasoning: str
+    supported_models_or_stacks: List[str]
+    source_url: str
+    verification_date: str
+
+
+class ProductComparisonItemSchema(BaseModel):
+    product_id: str
+    display_name: str
+    vendor: str
+    category: str
+    availability: str
+    pricing_tier_summary: str
+    pricing_model: str
+    free_tier: str
+    paid_tiers: List[str]
+    key_capabilities: List[str]
+    context_or_stack_details: List[str]
+    privacy_or_limitations: str
+    description: str
+    source_url: str
+    verification_date: str
+    provenance: Dict[str, str]
 
 
 class PromptFeaturesSchema(BaseModel):
@@ -154,14 +199,17 @@ class TaskClassificationSchema(BaseModel):
 
 class ModelComparisonResponse(BaseModel):
     status: str = "success"
+    category: str = "foundation_model"
     prompt_text: str
     prompt_features: PromptFeaturesSchema
     task_classification: TaskClassificationSchema
     ranking_method: str
     ranking_preset: str
     applied_weights: Dict[str, float]
-    ranked_models: List[RankedModelSchema]
-    model_details: Dict[str, ModelComparisonItemSchema]
+    ranked_models: List[RankedModelSchema] = []
+    model_details: Dict[str, ModelComparisonItemSchema] = {}
+    ranked_products: Optional[List[RankedProductSchema]] = None
+    product_details: Optional[Dict[str, ProductComparisonItemSchema]] = None
     provenance_declarations: Dict[str, str]
 
 
@@ -170,17 +218,21 @@ class ModelMetadataSchema(BaseModel):
     display_name: str
     provider: str
     family: str
-    context_window_tokens: int
-    max_output_tokens: int
+    category: str = "foundation_model"
+    context_window_tokens: Optional[int] = None
+    max_output_tokens: Optional[int] = None
     input_cost_per_m: Optional[float] = None
     output_cost_per_m: Optional[float] = None
-    pricing_effective_date: str
-    currency: str
-    tokenizer_name: str
-    capabilities: List[str]
-    strengths: List[str]
-    description: str
-    lifecycle_status: str = "active"
+    pricing_effective_date: Optional[str] = None
+    currency: Optional[str] = "USD"
+    tokenizer_name: Optional[str] = None
+    capabilities: List[str] = []
+    strengths: List[str] = []
+    description: str = ""
+    lifecycle_status: str
     source_url: Optional[str] = ""
     verification_date: Optional[str] = ""
     deprecation_date: Optional[str] = None
+    replacement_model_id: Optional[str] = None
+    pricing_tier_summary: Optional[str] = None
+    supported_options: Optional[List[str]] = None

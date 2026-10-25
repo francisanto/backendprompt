@@ -192,6 +192,51 @@ class ClaudeTokenizerAdapter(BaseTokenizerAdapter):
         )
 
 
+class GrokTokenizerAdapter(BaseTokenizerAdapter):
+    """
+    Local token counting adapter for xAI Grok models.
+    xAI does not publish an open-source offline tokenizer package; exact token counting
+    is only available via remote API.
+    This adapter provides a calibrated local estimation and explicitly flags results as 'estimated'.
+    """
+
+    def __init__(self, model_id: str):
+        super().__init__(model_id=model_id, tokenizer_name="grok_calibrated_heuristic")
+
+    def count_tokens(self, text: str) -> TokenCountResult:
+        if not text or not text.strip():
+            return TokenCountResult(
+                token_count=0,
+                method="estimated",
+                tokenizer_name=self.tokenizer_name,
+                is_exact=False,
+                notes="Zero tokens for empty or whitespace-only input."
+            )
+
+        # Calibrated heuristic for Grok SentencePiece token distribution:
+        # Code segments average ~3.55 chars/token; English prose averages ~4.05 chars/token.
+        is_code = bool(re.search(r"```|def |class |function|import |<[a-z]+>|SELECT |WHERE |[{};]", text))
+        char_ratio = 3.55 if is_code else 4.05
+
+        char_len = len(text)
+        word_len = len(text.split())
+
+        char_est = char_len / char_ratio
+        word_est = word_len * (1.26 if is_code else 1.30)
+        est = max(1, int(round((char_est * 0.70) + (word_est * 0.30))))
+
+        return TokenCountResult(
+            token_count=est,
+            method="estimated",
+            tokenizer_name=self.tokenizer_name,
+            is_exact=False,
+            notes=(
+                "Estimated using calibrated xAI Grok SentencePiece heuristic. "
+                "xAI does not publish an open-source offline tokenizer package."
+            )
+        )
+
+
 class UnsupportedTokenizerAdapter(BaseTokenizerAdapter):
     """
     Fallback adapter for unknown or unsupported model architectures.
@@ -225,5 +270,7 @@ def get_tokenizer_adapter(model_id: str) -> BaseTokenizerAdapter:
         return GeminiTokenizerAdapter(model_id=model_id)
     elif "claude" in low:
         return ClaudeTokenizerAdapter(model_id=model_id)
+    elif "grok" in low:
+        return GrokTokenizerAdapter(model_id=model_id)
     else:
         return UnsupportedTokenizerAdapter(model_id=model_id)

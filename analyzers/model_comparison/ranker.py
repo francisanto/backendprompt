@@ -434,3 +434,327 @@ def rank_models(
         return rank_models_topsis(candidates, weights, active_preset)
     else:
         return rank_models_weighted_sum(candidates, weights, active_preset)
+
+
+# ===========================================================================
+# Category B & C: Multi-Criteria Ranking for IDEs & App Builders
+# ===========================================================================
+
+@dataclass
+class RankedProduct:
+    rank: int
+    product_id: str
+    display_name: str
+    vendor: str
+    category: str  # "ide_assistant" or "app_builder"
+    score: float  # Relative recommendation score [0.0, 1.0]
+    availability: str
+    pricing_summary: str
+    key_strengths: List[str]
+    reasoning: str
+    supported_models_or_stacks: List[str]
+    source_url: str
+    verification_date: str
+
+
+IDE_PRESET_WEIGHTS: Dict[str, Dict[str, float]] = {
+    "balanced": {
+        "multi_file_agent": 0.20,
+        "repo_indexing": 0.15,
+        "terminal_execution": 0.15,
+        "model_flexibility": 0.15,
+        "ecosystem_integration": 0.15,
+        "privacy_controls": 0.10,
+        "plan_affordability": 0.10
+    },
+    "agentic_power": {
+        "multi_file_agent": 0.35,
+        "terminal_execution": 0.25,
+        "repo_indexing": 0.20,
+        "model_flexibility": 0.10,
+        "ecosystem_integration": 0.05,
+        "privacy_controls": 0.02,
+        "plan_affordability": 0.03
+    },
+    "ecosystem_integration": {
+        "ecosystem_integration": 0.35,
+        "model_flexibility": 0.25,
+        "plan_affordability": 0.15,
+        "repo_indexing": 0.10,
+        "multi_file_agent": 0.10,
+        "terminal_execution": 0.03,
+        "privacy_controls": 0.02
+    },
+    "privacy_enterprise": {
+        "privacy_controls": 0.40,
+        "repo_indexing": 0.20,
+        "ecosystem_integration": 0.15,
+        "multi_file_agent": 0.10,
+        "terminal_execution": 0.05,
+        "model_flexibility": 0.05,
+        "plan_affordability": 0.05
+    }
+}
+
+
+APP_BUILDER_PRESET_WEIGHTS: Dict[str, Dict[str, float]] = {
+    "balanced": {
+        "full_stack_backend": 0.20,
+        "frontend_ui_quality": 0.20,
+        "deployment_hosting": 0.15,
+        "code_export_github": 0.20,
+        "autonomous_iteration": 0.15,
+        "pricing_accessibility": 0.10
+    },
+    "full_stack": {
+        "full_stack_backend": 0.40,
+        "autonomous_iteration": 0.20,
+        "deployment_hosting": 0.15,
+        "code_export_github": 0.15,
+        "frontend_ui_quality": 0.05,
+        "pricing_accessibility": 0.05
+    },
+    "frontend_ui": {
+        "frontend_ui_quality": 0.45,
+        "deployment_hosting": 0.20,
+        "pricing_accessibility": 0.15,
+        "autonomous_iteration": 0.10,
+        "code_export_github": 0.05,
+        "full_stack_backend": 0.05
+    },
+    "code_ownership": {
+        "code_export_github": 0.45,
+        "full_stack_backend": 0.20,
+        "autonomous_iteration": 0.15,
+        "deployment_hosting": 0.10,
+        "frontend_ui_quality": 0.05,
+        "pricing_accessibility": 0.05
+    }
+}
+
+
+def validate_and_normalize_product_weights(
+    weights: Optional[Dict[str, float]],
+    category: str,
+    preset: str = "balanced"
+) -> Dict[str, float]:
+    """Validates and normalizes weights for IDEs or App Builders."""
+    catalog = IDE_PRESET_WEIGHTS if category == "ide_assistant" else APP_BUILDER_PRESET_WEIGHTS
+    default_w = catalog.get(preset, catalog["balanced"])
+
+    if not weights:
+        return dict(default_w)
+
+    clean_w: Dict[str, float] = {}
+    for k in default_w.keys():
+        val = weights.get(k, 0.0)
+        if isinstance(val, (int, float)) and not math.isnan(val) and val >= 0:
+            clean_w[k] = float(val)
+        else:
+            clean_w[k] = 0.0
+
+    total = sum(clean_w.values())
+    if total <= 0:
+        return dict(default_w)
+
+    return {k: round(v / total, 4) for k, v in clean_w.items()}
+
+
+def rank_products(
+    products: List[Any],
+    category: str,
+    method: RankingMethod = RankingMethod.WEIGHTED_SUM,
+    preset: str = "balanced",
+    custom_weights: Optional[Dict[str, float]] = None,
+    prompt_text: str = ""
+) -> Tuple[List[RankedProduct], Dict[str, float]]:
+    """
+    Ranks IDE coding assistants or AI App Builders using WSM or TOPSIS.
+    Prevents category leakage and grounds scores in verified product capabilities.
+    """
+    if not products:
+        return [], {}
+
+    effective_weights = validate_and_normalize_product_weights(custom_weights, category, preset)
+
+    # Dynamic relevance tuning based on prompt intent (without altering user custom weights)
+    if not custom_weights and prompt_text:
+        low_p = prompt_text.lower()
+        adjusted_w = dict(effective_weights)
+        if category == "ide_assistant":
+            if any(k in low_p for k in ["monorepo", "repository", "across files", "affected files", "codebase"]):
+                adjusted_w["repo_indexing"] = adjusted_w.get("repo_indexing", 0.15) * 1.5
+                adjusted_w["multi_file_agent"] = adjusted_w.get("multi_file_agent", 0.20) * 1.4
+            if any(k in low_p for k in ["test", "run", "execute", "terminal", "command", "cli", "build"]):
+                adjusted_w["terminal_execution"] = adjusted_w.get("terminal_execution", 0.15) * 1.5
+            if any(k in low_p for k in ["privacy", "soc2", "enterprise", "compliance", "retention"]):
+                adjusted_w["privacy_controls"] = adjusted_w.get("privacy_controls", 0.10) * 2.0
+        elif category == "app_builder":
+            if any(k in low_p for k in ["postgres", "postgresql", "database", "auth", "authentication", "backend", "crud", "api"]):
+                adjusted_w["full_stack_backend"] = adjusted_w.get("full_stack_backend", 0.20) * 1.6
+            if any(k in low_p for k in ["landing", "component", "tailwind", "ui", "design", "css", "frontend", "dashboard"]):
+                adjusted_w["frontend_ui_quality"] = adjusted_w.get("frontend_ui_quality", 0.20) * 1.5
+            if any(k in low_p for k in ["github", "export", "git", "repo", "sync", "pr", "pull request"]):
+                adjusted_w["code_export_github"] = adjusted_w.get("code_export_github", 0.20) * 1.5
+
+        # Re-normalize
+        tot = sum(adjusted_w.values())
+        if tot > 0:
+            effective_weights = {k: round(v / tot, 4) for k, v in adjusted_w.items()}
+
+    criteria_keys = list(effective_weights.keys())
+    ranked: List[RankedProduct] = []
+
+    if method == RankingMethod.TOPSIS and len(products) > 1:
+        # TOPSIS implementation for products
+        # 1. Normalize decision matrix
+        norm_matrix: Dict[str, Dict[str, float]] = {}
+        for k in criteria_keys:
+            sum_sq = sum((getattr(p, "criteria_scores", {}).get(k, 0.5) ** 2) for p in products)
+            denom = math.sqrt(sum_sq) if sum_sq > 0 else 1.0
+            for p in products:
+                pid = getattr(p, "product_id", "")
+                if pid not in norm_matrix:
+                    norm_matrix[pid] = {}
+                norm_matrix[pid][k] = (getattr(p, "criteria_scores", {}).get(k, 0.5) / denom) * effective_weights.get(k, 0.0)
+
+        # 2. Positive & Negative Ideals (all criteria are benefits, higher is better)
+        ideal_pos: Dict[str, float] = {}
+        ideal_neg: Dict[str, float] = {}
+        for k in criteria_keys:
+            vals = [norm_matrix[getattr(p, "product_id", "")][k] for p in products]
+            ideal_pos[k] = max(vals)
+            ideal_neg[k] = min(vals)
+
+        # 3. Closeness calculation
+        for p in products:
+            pid = getattr(p, "product_id", "")
+            p_scores = norm_matrix[pid]
+            d_pos = math.sqrt(sum((p_scores[k] - ideal_pos[k]) ** 2 for k in criteria_keys))
+            d_neg = math.sqrt(sum((p_scores[k] - ideal_neg[k]) ** 2 for k in criteria_keys))
+            denom = d_pos + d_neg
+            closeness = (d_neg / denom) if denom > 0 else 0.50
+
+            reason = _generate_product_reasoning(p, category, closeness, effective_weights)
+            ranked.append(RankedProduct(
+                rank=1,
+                product_id=pid,
+                display_name=getattr(p, "display_name", pid),
+                vendor=getattr(p, "vendor", ""),
+                category=category,
+                score=round(closeness, 4),
+                availability=getattr(p, "availability", "generally_available"),
+                pricing_summary=getattr(p, "pricing_tier_summary", ""),
+                key_strengths=getattr(p, "key_capabilities", [])[:3],
+                reasoning=reason,
+                supported_models_or_stacks=getattr(p, "supported_models", getattr(p, "primary_stacks", [])),
+                source_url=getattr(p, "source_url", ""),
+                verification_date=getattr(p, "verification_date", "")
+            ))
+    else:
+        # Weighted Sum Model
+        for p in products:
+            pid = getattr(p, "product_id", "")
+            c_scores = getattr(p, "criteria_scores", {})
+            score = sum(c_scores.get(k, 0.5) * effective_weights.get(k, 0.0) for k in criteria_keys)
+            score = max(0.0, min(1.0, score))
+            reason = _generate_product_reasoning(p, category, score, effective_weights)
+            ranked.append(RankedProduct(
+                rank=1,
+                product_id=pid,
+                display_name=getattr(p, "display_name", pid),
+                vendor=getattr(p, "vendor", ""),
+                category=category,
+                score=round(score, 4),
+                availability=getattr(p, "availability", "generally_available"),
+                pricing_summary=getattr(p, "pricing_tier_summary", ""),
+                key_strengths=getattr(p, "key_capabilities", [])[:3],
+                reasoning=reason,
+                supported_models_or_stacks=getattr(p, "supported_models", getattr(p, "primary_stacks", [])),
+                source_url=getattr(p, "source_url", ""),
+                verification_date=getattr(p, "verification_date", "")
+            ))
+
+    # Sort descending by relative recommendation score
+    ranked.sort(key=lambda x: x.score, reverse=True)
+    for i, r in enumerate(ranked):
+        r.rank = i + 1
+
+    return ranked, effective_weights
+
+
+def _generate_product_reasoning(
+    p: Any,
+    category: str,
+    score: float,
+    weights: Dict[str, float]
+) -> str:
+    """Generates transparent, evidence-based reasoning for product ranking."""
+    pid = getattr(p, "product_id", "")
+    dname = getattr(p, "display_name", pid)
+    vendor = getattr(p, "vendor", "")
+    pricing = getattr(p, "pricing_tier_summary", "")
+
+    if category == "ide_assistant":
+        if pid == "google-antigravity":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Delivers autonomous multi-surface agents with asynchronous task execution, "
+                "verifiable artifacts and diff reviews, and terminal/browser tool integration."
+            )
+        elif pid == "cursor":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Features Composer for multi-file agentic code generation, local codebase vector indexing, "
+                "and flexible frontier model selection (Claude 3.7 Sonnet, GPT-4o). "
+                f"Pricing: {pricing}."
+            )
+        elif pid == "windsurf":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Excels in continuous flow human-agent collaboration with Cascade Fast Context routing, "
+                "inline multi-file edits, and autonomous terminal execution. "
+                f"Pricing: {pricing}."
+            )
+        elif pid == "github-copilot":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Provides the broadest editor ecosystem integration (VS Code, JetBrains, Visual Studio, Xcode), "
+                "Copilot Workspace Agent mode, automated PR reviews, and robust enterprise zero data retention. "
+                f"Pricing: {pricing}."
+            )
+        else:
+            return f"{dname} by {vendor} evaluated under verified IDE capabilities with score {score:.3f}."
+
+    elif category == "app_builder":
+        if pid == "lovable-dev":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Leading full-stack web MVP builder featuring native Supabase PostgreSQL database integration, "
+                "built-in authentication, Row-Level Security, and two-way GitHub repository synchronization."
+            )
+        elif pid == "replit-agent":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Autonomous full-stack development platform with full Linux backend execution, "
+                "multi-language runtime support (Python FastAPI, Node.js, Go), and native PostgreSQL persistence. "
+                f"Pricing: {pricing}."
+            )
+        elif pid == "v0-dev":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "Top-tier generative UI tool producing production-ready React, Next.js, and shadcn/ui components "
+                "with 1-click Vercel deployment. Note: frontend-focused; bring-your-own-backend required. "
+                f"Pricing: {pricing}."
+            )
+        elif pid == "bolt-new":
+            return (
+                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                "In-browser full-stack execution powered by StackBlitz WebContainers. "
+                "Features interactive Plan & Build agent modes, container terminal access, and instant hosting. "
+                f"Pricing: {pricing}."
+            )
+        else:
+            return f"{dname} by {vendor} evaluated under verified app-builder capabilities with score {score:.3f}."
+
+    return f"{dname} ranks with relative score {score:.3f}."

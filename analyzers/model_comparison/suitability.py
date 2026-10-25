@@ -67,28 +67,41 @@ def get_suitability_breakdown(
         or features.technical_keyword_density > 0.40
     )
     if is_coding_task:
-        if model.model_id == "claude-3-5-sonnet":
+        if model.model_id in ["claude-3-7-sonnet", "o1"]:
             code_score = 0.98
+        elif model.model_id in ["o3-mini", "claude-3-5-sonnet"]:
+            code_score = 0.96
         elif model.model_id == "gpt-4o":
             code_score = 0.95
-        elif model.model_id in ["gemini-1.5-pro", "gpt-4-turbo"]:
+        elif model.model_id in ["gemini-2.5-pro", "gemini-1.5-pro", "gpt-4-turbo"]:
+            code_score = 0.92
+        elif model.model_id in ["grok-3"]:
             code_score = 0.91
-        elif model.model_id == "gemini-2.0-flash":
-            code_score = 0.86
+        elif model.model_id in ["gemini-2.0-flash", "gemini-2.5-flash"]:
+            code_score = 0.88
         elif model.model_id == "claude-3-5-haiku":
             code_score = 0.85
-        elif model.model_id == "claude-3-opus":
-            code_score = 0.84
+        elif model.model_id in ["grok-3-mini", "claude-3-opus"]:
+            code_score = 0.83
         elif model.model_id == "gpt-4o-mini":
-            code_score = 0.78
+            code_score = 0.80
+        elif "code_generation" in capabilities:
+            code_score = 0.82
         else:
             code_score = 0.70
     else:
         code_score = 0.80
 
     # 3. Complexity Matching Score
-    is_flagship = model.model_id in ["claude-3-5-sonnet", "gpt-4o", "gemini-1.5-pro", "claude-3-opus", "gpt-4-turbo"]
-    is_lightweight = model.model_id in ["gpt-4o-mini", "gemini-1.5-flash", "gemini-2.0-flash", "claude-3-5-haiku"]
+    is_flagship = model.model_id in [
+        "claude-3-7-sonnet", "o1", "o3-mini", "gpt-4o", "gemini-2.5-pro", "grok-3",
+        "claude-3-5-sonnet", "gemini-1.5-pro", "claude-3-opus", "gpt-4-turbo"
+    ] or "complex_reasoning" in capabilities or "hybrid_reasoning" in capabilities
+
+    is_lightweight = model.model_id in [
+        "gpt-4o-mini", "gemini-2.5-flash", "gemini-2.0-flash", "claude-3-5-haiku", "grok-3-mini",
+        "gemini-1.5-flash", "gpt-3.5-turbo"
+    ] or "fast_inference" in capabilities or "high_speed" in capabilities
 
     if features.complexity_score >= 0.40:
         complexity_fit = 0.96 if is_flagship else 0.74

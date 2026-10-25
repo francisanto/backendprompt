@@ -248,44 +248,88 @@ PromptShield AI includes a **100% offline, local foundation model comparison and
 
 ### 2. Model Registry & Verified Lifecycle Tracking
 
-Model metadata is centralized in `analyzers/model_comparison/registry.py` with verified source documentation (February 2025):
+### 2. Multi-Category AI Catalogue & Verified Lifecycle Policy
+
+PromptShield AI organizes AI systems into three distinct categories with strict category isolation:
+
+#### Category A: Foundation Models (`foundation_model`)
+Centralized in `analyzers/model_comparison/registry.py` with verified provider documentation (Feb 2025):
 
 - **Active Models (Default Recommendation Pool):**
   - `gpt-4o` (128k context, $2.50/$10.00 per M) — [OpenAI Models](https://platform.openai.com/docs/models#gpt-4o)
-  - `gpt-4o-mini` (128k context, $0.15/$0.60 per M) — [OpenAI Pricing](https://platform.openai.com/docs/pricing)
-  - `gemini-1.5-pro` (2M context, $1.25/$5.00 per M) — [Google Gemini](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-1.5-pro)
-  - `gemini-1.5-flash` (1M context, $0.075/$0.30 per M) — [Google Gemini](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-1.5-flash)
-  - `gemini-2.0-flash` (1M context, $0.10/$0.40 per M) — [Google Gemini](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.0-flash)
-  - `claude-3-5-sonnet` (200k context, $3.00/$15.00 per M) — [Anthropic Models](https://docs.anthropic.com/en/docs/about-claude/models#claude-3-5-sonnet)
+  - `gpt-4o-mini` (128k context, $0.15/$0.60 per M) — [OpenAI Pricing](https://openai.com/api/pricing)
+  - `o1` (200k context, $15.00/$60.00 per M) — [OpenAI o1](https://platform.openai.com/docs/models#o1)
+  - `o3-mini` (200k context, $1.10/$4.40 per M) — [OpenAI o3-mini](https://platform.openai.com/docs/models#o3-mini)
+  - `gemini-2.0-flash` (1M context, $0.10/$0.40 per M) — [Google Gemini 2.0 Flash](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.0-flash)
+  - `gemini-2.5-pro` (2M context, $1.25/$5.00 per M) — [Google Gemini 2.5 Pro](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)
+  - `gemini-2.5-flash` (1M context, $0.10/$0.40 per M) — [Google Gemini 2.5 Flash](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)
+  - `claude-3-7-sonnet` (200k context, $3.00/$15.00 per M) — [Anthropic Claude 3.7 Sonnet](https://docs.anthropic.com/en/docs/about-claude/models#claude-3-7-sonnet)
   - `claude-3-5-haiku` (200k context, $0.80/$4.00 per M) — [Anthropic Pricing](https://www.anthropic.com/pricing)
-  - `claude-3-opus` (200k context, $15.00/$75.00 per M) — [Anthropic Pricing](https://www.anthropic.com/pricing)
-- **Deprecated / Retired Models (Excluded by default; available on request):**
-  - `gpt-4-turbo` (Deprecated; superseded by GPT-4o) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#gpt-4-turbo)
-  - `gpt-3.5-turbo` (Retired; superseded by GPT-4o-mini) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations)
+  - `grok-3` (131k context, $3.00/$15.00 per M) — [xAI Grok](https://docs.x.ai/)
+  - `grok-3-mini` (131k context, $0.30/$0.50 per M) — [xAI Grok](https://docs.x.ai/)
+
+- **Deprecated / Retired Models (Excluded by default; accessible via `include_deprecated=True` or direct ID):**
+  - `gemini-1.5-pro` (Retired Sep 2025; replaced by Gemini 2.5 Pro) — [Google Deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
+  - `gemini-1.5-flash` (Retired Sep 2025; replaced by Gemini 2.5 Flash) — [Google Deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
+  - `claude-3-5-sonnet` (Deprecated Aug 2025; replaced by Claude 3.7 Sonnet) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
+  - `claude-3-opus` (Retired Jan 2026; replaced by Claude 3.7 Sonnet) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
+  - `gpt-4-turbo` (Deprecated; replaced by GPT-4o) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#gpt-4-turbo)
+  - `gpt-3.5-turbo` (Retired; replaced by GPT-4o-mini) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations)
+  - `grok-2` (Retired; replaced by Grok 3) — [xAI Deprecations](https://docs.x.ai/)
+
+#### Category B: IDEs & Coding Assistants (`ide_assistant`)
+Evaluated on developer environment workflows, multi-file agent autonomy, and repository understanding:
+- **`cursor`** (Anysphere) — VS Code fork featuring Composer, local vector indexing, and Claude 3.7/GPT-4o selection. ($0 / $20/mo / $40/mo).
+- **`windsurf`** (Codeium) — Continuous flow IDE with Cascade Fast Context routing, multi-file inline edits, and terminal execution. ($0 / $20/mo / $40/mo).
+- **`github-copilot`** (GitHub / Microsoft) — Deepest editor ecosystem (VS Code, JetBrains, Visual Studio, Xcode), Copilot Workspace, PR review. ($0 / $10/mo / $19/mo / $39/mo).
+- **`google-antigravity`** (Google) — Agent-first platform with autonomous multi-surface agents, asynchronous agent manager, verifiable artifacts, and browser subagents.
+
+#### Category C: AI App Builders (`app_builder`)
+Evaluated on full-stack scaffolding, UI generation, database/auth support, and code ownership:
+- **`v0-dev`** (Vercel) — UI component generator outputting production-grade React, Next.js, and shadcn/ui. Frontend-focused ($0 / $20/mo).
+- **`bolt-new`** (StackBlitz) — In-browser full-stack prototyping running Node.js in WebContainers with interactive Plan & Build modes ($0 / $20/mo).
+- **`lovable-dev`** (Lovable) — Full-stack web MVP builder tightly integrated with Supabase PostgreSQL, Auth, and two-way GitHub sync ($0 / $20/mo / $50/mo).
+- **`replit-agent`** (Replit) — Autonomous cloud development platform with full Linux backend execution, multi-language support (Python, Node, Go), and Postgres ($0 / $20/mo / $95/mo).
 
 ### 3. Multi-Criteria Ranking Algorithms
 
 The platform implements two decision-making algorithms:
 
 1. **Weighted Sum Model (WSM):**
-   $$S_i = w_{\text{suit}} \cdot \bar{s}_i + w_{\text{cost}} \cdot \bar{c}_i + w_{\text{ctx}} \cdot \bar{x}_i$$
-   - Normalized logarithmically across multi-order-of-magnitude pricing ($0.075/M to $75/M).
-   - Cost is an inverted criterion (lower cost $\to$ higher score).
-   - Suitability and context headroom are benefit criteria (higher $\to$ higher score).
+   $$S_i = \sum_{j} w_j \cdot \bar{x}_{ij}$$
+   - Normalized logarithmically across multi-order-of-magnitude foundation model pricing ($0.075/M to $75/M).
+   - Evaluates category-specific benefit and cost criteria.
 
 2. **TOPSIS (Similarity to Ideal Solution):**
    $$C_i = \frac{D_i^-}{D_i^+ + D_i^-}$$
-   - Measures Euclidean distance to the positive ideal solution ($D_i^+$) and negative ideal solution ($D_i^-$).
+   - Measures Euclidean distance to positive ideal solution ($D_i^+$) and negative ideal solution ($D_i^-$).
    - Handles degenerate zero-range and single-candidate cases cleanly.
 
-#### Presets & Weight Allocations
+#### Presets & Weight Allocations by Category
 
-| Preset | Suitability Weight | Cost Weight | Context Headroom Weight | Objective Focus |
+**Category A: Foundation Models**
+| Preset | Suitability | Cost | Context Headroom | Objective Focus |
 |---|---|---|---|---|
 | **`balanced`** | 0.45 | 0.35 | 0.20 | Balanced compromise between cost, quality, and context. |
-| **`cost_optimized`** | 0.20 | 0.70 | 0.10 | Prioritizes economical models (e.g. Gemini 1.5 Flash, GPT-4o-mini). |
-| **`quality_optimized`** | 0.80 | 0.05 | 0.15 | Prioritizes flagship capability tiers (Claude 3.5 Sonnet, GPT-4o). |
-| **`long_context`** | 0.25 | 0.25 | 0.50 | Prioritizes massive context capacity (Gemini 1.5 Pro 2M window). |
+| **`cost_optimized`** | 0.20 | 0.70 | 0.10 | Prioritizes economical models (e.g. Gemini 2.0 Flash, GPT-4o-mini). |
+| **`quality_optimized`** | 0.80 | 0.05 | 0.15 | Prioritizes frontier capability tiers (Claude 3.7 Sonnet, o1, o3-mini, GPT-4o). |
+| **`long_context`** | 0.25 | 0.25 | 0.50 | Prioritizes massive context capacity (Gemini 2.5 Pro 2M window). |
+
+**Category B: IDE Assistants**
+| Preset | Multi-File Agent | Repo Indexing | Terminal Exec | Model Flex | Ecosystem | Privacy | Affordability |
+|---|---|---|---|---|---|---|---|
+| **`balanced`** | 0.20 | 0.15 | 0.15 | 0.15 | 0.15 | 0.10 | 0.10 |
+| **`agentic_power`** | 0.35 | 0.20 | 0.25 | 0.10 | 0.05 | 0.02 | 0.03 |
+| **`ecosystem_integration`** | 0.10 | 0.10 | 0.03 | 0.25 | 0.35 | 0.02 | 0.15 |
+| **`privacy_enterprise`** | 0.10 | 0.20 | 0.05 | 0.05 | 0.15 | 0.40 | 0.05 |
+
+**Category C: AI App Builders**
+| Preset | Full-Stack Backend | Frontend UI Quality | Deployment/Hosting | Code Export/GitHub | Autonomous Iteration | Pricing Accessibility |
+|---|---|---|---|---|---|---|
+| **`balanced`** | 0.20 | 0.20 | 0.15 | 0.20 | 0.15 | 0.10 |
+| **`full_stack`** | 0.40 | 0.05 | 0.15 | 0.15 | 0.20 | 0.05 |
+| **`frontend_ui`** | 0.05 | 0.45 | 0.20 | 0.05 | 0.10 | 0.15 |
+| **`code_ownership`** | 0.20 | 0.05 | 0.10 | 0.45 | 0.15 | 0.05 |
 
 ### 4. What is NOT Measured in Offline Mode
 
@@ -293,6 +337,7 @@ PromptShield AI strictly enforces transparent provenance:
 - **No Live Latency:** Network latency, time-to-first-token (TTFT), and token generation throughput are marked `unavailable` offline.
 - **No Fabricated Benchmarks:** The platform does not invent or claim to measure third-party MMLU, SWE-bench, or HumanEval scores offline.
 - **Relative Recommendation Scores:** The final ranking score is explicitly a multi-criteria decision trade-off index, not a probability of answer correctness.
+- **No Product Token Costs:** IDEs and App Builders disclose their real subscription and credit structures ($0 free, $10-$20/mo pro) rather than fabricated token costs.
 
 ---
 
@@ -307,7 +352,9 @@ PromptShield AI strictly enforces transparent provenance:
 - Swagger UI Documentation: `http://localhost:8000/docs`
 - Healthcheck: `GET http://localhost:8000/`
 - List Eligible Models: `GET http://localhost:8000/models`
-- Model Comparison: `POST http://localhost:8000/compare-models`
+- List IDE Assistants: `GET http://localhost:8000/models?category=ide_assistant`
+- List App Builders: `GET http://localhost:8000/models?category=app_builder`
+- Multi-Category Comparison: `POST http://localhost:8000/compare-models`
 
 ### Running the Pytest Suite
 
