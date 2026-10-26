@@ -96,7 +96,7 @@ def list_models(
                 verification_date=m.verification_date,
                 deprecation_date=m.deprecation_date,
                 replacement_model_id=m.replacement_model_id,
-                last_audit_date=getattr(m, "last_audit_date", "2026-10-25"),
+                last_audit_date=getattr(m, "last_audit_date", "2026-10-26"),
                 unverified_fields=getattr(m, "unverified_fields", []),
                 is_stale_pricing=m.pricing.is_stale,
                 pricing_verification_date=m.pricing.pricing_verification_date
@@ -126,7 +126,7 @@ def list_models(
                 verification_date=i.verification_date,
                 pricing_tier_summary=i.pricing_tier_summary,
                 supported_options=i.supported_models,
-                last_audit_date=getattr(i, "last_audit_date", "2026-10-25"),
+                last_audit_date=getattr(i, "last_audit_date", "2026-10-26"),
                 unverified_fields=getattr(i, "unverified_fields", [])
             )
             for i in ides
@@ -154,7 +154,7 @@ def list_models(
                 verification_date=b.verification_date,
                 pricing_tier_summary=b.pricing_tier_summary,
                 supported_options=b.supported_backends,
-                last_audit_date=getattr(b, "last_audit_date", "2026-10-25"),
+                last_audit_date=getattr(b, "last_audit_date", "2026-10-26"),
                 unverified_fields=getattr(b, "unverified_fields", [])
             )
             for b in builders
@@ -203,7 +203,7 @@ def get_model(model_id: str):
             verification_date=item.verification_date,
             deprecation_date=item.deprecation_date,
             replacement_model_id=item.replacement_model_id,
-            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-26"),
             unverified_fields=getattr(item, "unverified_fields", []),
             is_stale_pricing=item.pricing.is_stale,
             pricing_verification_date=item.pricing.pricing_verification_date
@@ -223,7 +223,7 @@ def get_model(model_id: str):
             verification_date=item.verification_date,
             pricing_tier_summary=item.pricing_tier_summary,
             supported_options=item.supported_models,
-            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-26"),
             unverified_fields=getattr(item, "unverified_fields", [])
         )
     elif isinstance(item, AppBuilderMetadata):
@@ -241,7 +241,7 @@ def get_model(model_id: str):
             verification_date=item.verification_date,
             pricing_tier_summary=item.pricing_tier_summary,
             supported_options=item.supported_backends,
-            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-26"),
             unverified_fields=getattr(item, "unverified_fields", [])
         )
     else:
@@ -320,8 +320,10 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "lifecycle_status": d.lifecycle_status,
                 "source_url": d.source_url,
                 "verification_date": d.verification_date,
-                "last_audit_date": getattr(d, "last_audit_date", "2026-10-25"),
-                "unverified_fields": getattr(d, "unverified_fields", [])
+                "last_audit_date": getattr(d, "last_audit_date", "2026-10-26"),
+                "unverified_fields": getattr(d, "unverified_fields", []),
+                "token_count_confidence": getattr(d, "token_count_confidence", 1.0),
+                "token_count_disclaimer": getattr(d, "token_count_disclaimer", "")
             }
 
     ranked_models_list = []
@@ -342,7 +344,10 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "reasoning": rm.reasoning,
                 "lifecycle_status": rm.lifecycle_status,
                 "score_type": getattr(rm, "score_type", "heuristic_recommendation_score"),
-                "score_disclaimer": getattr(rm, "score_disclaimer", None)
+                "score_disclaimer": getattr(rm, "score_disclaimer", None),
+                "token_count_method": getattr(rm, "token_count_method", "exact"),
+                "token_count_confidence": getattr(rm, "token_count_confidence", 1.0),
+                "token_count_disclaimer": getattr(rm, "token_count_disclaimer", None)
             })
 
     # 2. Format product details if applicable
@@ -366,7 +371,7 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "description": pd.description,
                 "source_url": pd.source_url,
                 "verification_date": pd.verification_date,
-                "last_audit_date": getattr(pd, "last_audit_date", "2026-10-25"),
+                "last_audit_date": getattr(pd, "last_audit_date", "2026-10-26"),
                 "unverified_fields": getattr(pd, "unverified_fields", []),
                 "provenance": pd.provenance
             }

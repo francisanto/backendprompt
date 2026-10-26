@@ -121,8 +121,10 @@ class ModelComparisonItemSchema(BaseModel):
     lifecycle_status: str
     source_url: Optional[str] = ""
     verification_date: Optional[str] = ""
-    last_audit_date: Optional[str] = "2026-10-25"
+    last_audit_date: Optional[str] = "2026-10-26"
     unverified_fields: List[str] = []
+    token_count_confidence: Optional[float] = 1.0
+    token_count_disclaimer: Optional[str] = None
 
 
 class RankedModelSchema(BaseModel):
@@ -141,6 +143,9 @@ class RankedModelSchema(BaseModel):
     lifecycle_status: str
     score_type: Optional[str] = "heuristic_recommendation_score"
     score_disclaimer: Optional[str] = None
+    token_count_method: Optional[str] = "exact"
+    token_count_confidence: Optional[float] = 1.0
+    token_count_disclaimer: Optional[str] = None
 
 
 class RankedProductSchema(BaseModel):
