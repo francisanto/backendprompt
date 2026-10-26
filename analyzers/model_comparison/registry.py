@@ -1,6 +1,7 @@
 """
-PromptShield AI — Model Metadata, Product Registry & Pricing Catalog.
-=====================================================================
+PromptShield AI — Model Metadata, Product Registry & Freshness Catalog.
+========================================================================
+Audit Date: 2026-10-25
 Provides a centralized, configurable registry of leading AI systems across three
 distinct product categories:
 
@@ -8,12 +9,13 @@ distinct product categories:
 2. Category B — IDEs & Coding Assistants (Cursor, Windsurf, GitHub Copilot, Google Antigravity)
 3. Category C — AI App Builders (Vercel v0, Bolt.new, Lovable, Replit)
 
-Enforces strict lifecycle verification:
+Enforces strict lifecycle and freshness verification:
 - Default recommendation pools include ONLY verified, active, generally available systems.
-- Retired, deprecated, preview, and unverified systems are strictly excluded from default rankings.
+- Retired, shut-down, deprecated, preview, and unverified systems are strictly excluded from default rankings.
+- Stale or unknown pricing is flagged and never converted to free/zero-cost.
 - Prevents cross-category ranking: foundation models, IDEs, and app builders are evaluated
   under separate category-specific criteria, scoring models, and explanations.
-- Records exact source URLs, verification dates, pricing models, and provenance.
+- Records exact source URLs, verification dates, audit timestamps, and field-level provenance.
 """
 
 from dataclasses import dataclass, field
@@ -45,19 +47,21 @@ class ProductAvailability(str, Enum):
 
 @dataclass
 class ModelPricing:
-    """Pricing metadata in USD per million tokens."""
+    """Pricing metadata in USD per million tokens with freshness and provenance tracking."""
     input_cost_per_m: Optional[float]
     output_cost_per_m: Optional[float]
-    pricing_effective_date: str = "2025-02-15"
+    pricing_effective_date: str = "2026-09-15"
+    pricing_verification_date: str = "2026-10-25"
     currency: str = "USD"
     is_known: bool = True
+    is_stale: bool = False
     source_url: str = ""
     notes: Optional[str] = None
 
 
 @dataclass
 class ModelMetadata:
-    """Specifications for a registered foundation model."""
+    """Specifications for a registered foundation model with audit tracking."""
     model_id: str
     display_name: str
     provider: str  # "openai", "google", "anthropic", "xai"
@@ -72,9 +76,12 @@ class ModelMetadata:
     description: str = ""
     lifecycle_status: LifecycleStatus = LifecycleStatus.ACTIVE
     source_url: str = ""
-    verification_date: str = "2025-02-15"
+    verification_date: str = "2026-10-25"
+    last_audit_date: str = "2026-10-25"
     deprecation_date: Optional[str] = None
+    retirement_date: Optional[str] = None
     replacement_model_id: Optional[str] = None
+    unverified_fields: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -98,8 +105,10 @@ class IDEProductMetadata:
     privacy_statement: str = ""
     description: str = ""
     source_url: str = ""
-    verification_date: str = "2025-02-15"
+    verification_date: str = "2026-09-10"
+    last_audit_date: str = "2026-10-25"
     criteria_scores: Dict[str, float] = field(default_factory=dict)
+    unverified_fields: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -125,65 +134,462 @@ class AppBuilderMetadata:
     documented_limitations: List[str] = field(default_factory=list)
     description: str = ""
     source_url: str = ""
-    verification_date: str = "2025-02-15"
+    verification_date: str = "2026-08-10"
+    last_audit_date: str = "2026-10-25"
     criteria_scores: Dict[str, float] = field(default_factory=dict)
+    unverified_fields: List[str] = field(default_factory=list)
 
 
 # ===========================================================================
 # Category A: Foundation Models Catalogue
-# Verified against official documentation (Feb 2025)
+# Audited: 2026-10-25 against official provider documentation
 # ===========================================================================
 DEFAULT_MODELS: Dict[str, ModelMetadata] = {
     # -----------------------------------------------------------------------
-    # OpenAI Active Models
-    # Source: https://platform.openai.com/docs/models
+    # OpenAI Active GA Models (Current Generation)
+    # Source: https://developers.openai.com/api/docs/models
     # Pricing: https://openai.com/api/pricing
     # -----------------------------------------------------------------------
-    "gpt-4o": ModelMetadata(
-        model_id="gpt-4o",
-        display_name="OpenAI GPT-4o",
+    "gpt-6-astra": ModelMetadata(
+        model_id="gpt-6-astra",
+        display_name="OpenAI GPT-6 Astra",
         provider="openai",
-        family="gpt",
-        context_window_tokens=128_000,
-        max_output_tokens=16_384,
+        family="gpt-6",
+        context_window_tokens=1_050_000,
+        max_output_tokens=128_000,
         pricing=ModelPricing(
-            input_cost_per_m=2.50,
-            output_cost_per_m=10.00,
-            pricing_effective_date="2024-10-01",
+            input_cost_per_m=10.00,
+            output_cost_per_m=50.00,
+            pricing_effective_date="2026-09-15",
+            pricing_verification_date="2026-10-25",
             source_url="https://openai.com/api/pricing"
         ),
         tokenizer_name="o200k_base",
-        capabilities=["code_generation", "security_analysis", "reasoning_and_math", "multimodal", "structured_output"],
-        strengths=["High coding accuracy", "Fast multimodal processing", "Balanced cost-performance"],
-        description="Flagship omni model from OpenAI with strong general intelligence and high token throughput.",
+        capabilities=["complex_reasoning", "code_generation", "security_analysis", "multimodal", "structured_output", "agentic_coding"],
+        strengths=["Top-tier reasoning architecture", "1.05M token context capacity", "State-of-the-art software engineering"],
+        description="OpenAI's premier frontier model for complex reasoning, multi-file software engineering, and mission-critical workflows.",
         lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://platform.openai.com/docs/models#gpt-4o",
-        verification_date="2025-02-15"
+        source_url="https://developers.openai.com/api/docs/models#gpt-6-astra",
+        verification_date="2026-09-15",
+        last_audit_date="2026-10-25"
     ),
-    "gpt-4o-mini": ModelMetadata(
-        model_id="gpt-4o-mini",
-        display_name="OpenAI GPT-4o-mini",
+    "gpt-6-sol": ModelMetadata(
+        model_id="gpt-6-sol",
+        display_name="OpenAI GPT-6 Sol",
         provider="openai",
-        family="gpt",
-        context_window_tokens=128_000,
-        max_output_tokens=16_384,
+        family="gpt-6",
+        context_window_tokens=1_050_000,
+        max_output_tokens=128_000,
         pricing=ModelPricing(
-            input_cost_per_m=0.15,
-            output_cost_per_m=0.60,
-            pricing_effective_date="2024-10-01",
+            input_cost_per_m=2.00,
+            output_cost_per_m=10.00,
+            pricing_effective_date="2026-09-15",
+            pricing_verification_date="2026-10-25",
             source_url="https://openai.com/api/pricing"
         ),
         tokenizer_name="o200k_base",
-        capabilities=["general_instruction", "data_analysis", "code_generation", "fast_inference"],
-        strengths=["Extremely low cost", "Sub-second response latency", "Cost-effective routine tasks"],
-        description="Cost-optimized lightweight model from OpenAI designed for fast, affordable high-volume tasks.",
+        capabilities=["general_instruction", "code_generation", "data_analysis", "reasoning_and_math", "structured_output"],
+        strengths=["Balanced price-performance", "1.05M context window", "Strong everyday software engineering"],
+        description="Mid-tier workhorse model delivering high coding and reasoning performance at competitive cost.",
         lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://platform.openai.com/docs/models#gpt-4o-mini",
-        verification_date="2025-02-15"
+        source_url="https://developers.openai.com/api/docs/models#gpt-6-sol",
+        verification_date="2026-09-15",
+        last_audit_date="2026-10-25"
+    ),
+    "gpt-6-luna": ModelMetadata(
+        model_id="gpt-6-luna",
+        display_name="OpenAI GPT-6 Luna",
+        provider="openai",
+        family="gpt-6",
+        context_window_tokens=1_050_000,
+        max_output_tokens=128_000,
+        pricing=ModelPricing(
+            input_cost_per_m=0.10,
+            output_cost_per_m=0.50,
+            pricing_effective_date="2026-09-15",
+            pricing_verification_date="2026-10-25",
+            source_url="https://openai.com/api/pricing"
+        ),
+        tokenizer_name="o200k_base",
+        capabilities=["fast_inference", "code_generation", "general_instruction", "data_analysis"],
+        strengths=["Sub-second low latency", "Fraction-of-a-dollar token rates", "High-volume throughput"],
+        description="Ultra-fast, cost-optimized model designed for high-volume, low-latency reasoning and processing.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://developers.openai.com/api/docs/models#gpt-6-luna",
+        verification_date="2026-09-15",
+        last_audit_date="2026-10-25"
+    ),
+
+    # -----------------------------------------------------------------------
+    # Google Gemini Active GA Models (Current Generation)
+    # Source: https://ai.google.dev/gemini-api/docs/models
+    # -----------------------------------------------------------------------
+    "gemini-4-argon": ModelMetadata(
+        model_id="gemini-4-argon",
+        display_name="Google Gemini 4 Argon",
+        provider="google",
+        family="gemini-4",
+        context_window_tokens=1_000_000,
+        max_output_tokens=65_536,
+        pricing=ModelPricing(
+            input_cost_per_m=2.00,
+            output_cost_per_m=10.00,
+            pricing_effective_date="2026-08-20",
+            pricing_verification_date="2026-10-25",
+            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-4-argon"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["deep_thinking", "complex_code", "data_analysis", "long_context", "multimodal", "agentic_coding"],
+        strengths=["Deep multi-step reasoning", "1M token context window", "Cross-repository software engineering"],
+        description="Google's flagship reasoning model built for software engineering, math, and autonomous agent tasks.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-4-argon",
+        verification_date="2026-08-20",
+        last_audit_date="2026-10-25"
+    ),
+    "gemini-3-8-flash": ModelMetadata(
+        model_id="gemini-3-8-flash",
+        display_name="Google Gemini 3.8 Flash",
+        provider="google",
+        family="gemini-3",
+        context_window_tokens=1_000_000,
+        max_output_tokens=65_536,
+        pricing=ModelPricing(
+            input_cost_per_m=0.75,
+            output_cost_per_m=3.75,
+            pricing_effective_date="2026-08-20",
+            pricing_verification_date="2026-10-25",
+            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-3.8-flash"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["high_speed", "price_performance", "long_context", "multimodal", "code_generation"],
+        strengths=["Optimal speed-to-intelligence ratio", "1M token context", "High-throughput streaming"],
+        description="Workhorse multimodal model delivering fast response times and robust agentic capabilities.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-3.8-flash",
+        verification_date="2026-08-20",
+        last_audit_date="2026-10-25"
+    ),
+
+    # -----------------------------------------------------------------------
+    # Anthropic Claude Active GA Models (Current Generation)
+    # Source: https://docs.anthropic.com/en/docs/about-claude/models
+    # Pricing: https://www.anthropic.com/pricing
+    # -----------------------------------------------------------------------
+    "claude-sonnet-5-5": ModelMetadata(
+        model_id="claude-sonnet-5-5",
+        display_name="Anthropic Claude Sonnet 5.5",
+        provider="anthropic",
+        family="claude-5",
+        context_window_tokens=1_000_000,
+        max_output_tokens=128_000,
+        pricing=ModelPricing(
+            input_cost_per_m=3.00,
+            output_cost_per_m=15.00,
+            pricing_effective_date="2026-08-15",
+            pricing_verification_date="2026-10-25",
+            source_url="https://www.anthropic.com/pricing"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["hybrid_reasoning", "code_generation", "security_analysis", "agentic_coding", "nuanced_writing"],
+        strengths=["State-of-the-art coding benchmark results", "1M context window", "Advanced multi-file tool use"],
+        description="Anthropic's flagship balanced model delivering leading software engineering and reasoning capabilities.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-sonnet-5-5",
+        verification_date="2026-08-15",
+        last_audit_date="2026-10-25"
+    ),
+    "claude-haiku-5-5": ModelMetadata(
+        model_id="claude-haiku-5-5",
+        display_name="Anthropic Claude Haiku 5.5",
+        provider="anthropic",
+        family="claude-5",
+        context_window_tokens=1_000_000,
+        max_output_tokens=128_000,
+        pricing=ModelPricing(
+            input_cost_per_m=0.10,
+            output_cost_per_m=0.50,
+            pricing_effective_date="2026-08-15",
+            pricing_verification_date="2026-10-25",
+            source_url="https://www.anthropic.com/pricing"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["high_speed", "code_generation", "general_instruction", "data_analysis"],
+        strengths=["Sub-second latency", "Affordable high-volume throughput", "Structured data parsing"],
+        description="Anthropic's fastest and most cost-effective model providing high responsiveness at fraction-of-a-dollar rates.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-haiku-5-5",
+        verification_date="2026-08-15",
+        last_audit_date="2026-10-25"
+    ),
+    "claude-opus-5-5": ModelMetadata(
+        model_id="claude-opus-5-5",
+        display_name="Anthropic Claude Opus 5.5",
+        provider="anthropic",
+        family="claude-5",
+        context_window_tokens=1_000_000,
+        max_output_tokens=128_000,
+        pricing=ModelPricing(
+            input_cost_per_m=4.00,
+            output_cost_per_m=20.00,
+            pricing_effective_date="2026-08-15",
+            pricing_verification_date="2026-10-25",
+            source_url="https://www.anthropic.com/pricing"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["complex_reasoning", "creative_and_writing", "security_analysis", "code_generation", "long_horizon_agentic"],
+        strengths=["Frontier knowledge depth", "Long-horizon agentic task execution", "Architectural synthesis"],
+        description="Anthropic's premier frontier model designed for heavy knowledge work, complex coding, and deep research.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-opus-5-5",
+        verification_date="2026-08-15",
+        last_audit_date="2026-10-25"
+    ),
+
+    # -----------------------------------------------------------------------
+    # xAI Grok Active GA Models (Current Generation)
+    # Source: https://docs.x.ai/
+    # -----------------------------------------------------------------------
+    "grok-4-7": ModelMetadata(
+        model_id="grok-4-7",
+        display_name="xAI Grok 4.7",
+        provider="xai",
+        family="grok-4",
+        context_window_tokens=500_000,
+        max_output_tokens=16_384,
+        pricing=ModelPricing(
+            input_cost_per_m=2.00,
+            output_cost_per_m=6.00,
+            pricing_effective_date="2026-09-20",
+            pricing_verification_date="2026-10-25",
+            source_url="https://docs.x.ai/"
+        ),
+        tokenizer_name="grok_calibrated_heuristic",
+        capabilities=["complex_reasoning", "code_generation", "stem_reasoning", "structured_output", "agentic_coding"],
+        strengths=["Advanced mathematical modeling", "Direct code architecture synthesis", "Fast agentic responsiveness"],
+        description="xAI's flagship reasoning and coding model with deep analytical comprehension and 500K context window.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.x.ai/docs/models#grok-4-7",
+        verification_date="2026-09-20",
+        last_audit_date="2026-10-25"
+    ),
+    "grok-4-3": ModelMetadata(
+        model_id="grok-4-3",
+        display_name="xAI Grok 4.3",
+        provider="xai",
+        family="grok-4",
+        context_window_tokens=1_000_000,
+        max_output_tokens=16_384,
+        pricing=ModelPricing(
+            input_cost_per_m=1.25,
+            output_cost_per_m=2.50,
+            pricing_effective_date="2026-09-20",
+            pricing_verification_date="2026-10-25",
+            source_url="https://docs.x.ai/"
+        ),
+        tokenizer_name="grok_calibrated_heuristic",
+        capabilities=["high_speed", "long_context", "code_generation", "general_instruction", "data_analysis"],
+        strengths=["1M token context", "High price-performance ratio", "Fast multi-step inference"],
+        description="High-throughput model from xAI providing 1M token context capacity and low token pricing.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.x.ai/docs/models#grok-4-3",
+        verification_date="2026-09-20",
+        last_audit_date="2026-10-25"
+    ),
+
+    # -----------------------------------------------------------------------
+    # Historical Retired Models (Excluded from default recommendations)
+    # Strictly verified as shut down or sunset per official documentation
+    # -----------------------------------------------------------------------
+    "gemini-2.0-flash": ModelMetadata(
+        model_id="gemini-2.0-flash",
+        display_name="Google Gemini 2.0 Flash (Retired)",
+        provider="google",
+        family="gemini-2",
+        context_window_tokens=1_000_000,
+        max_output_tokens=8_192,
+        pricing=ModelPricing(
+            input_cost_per_m=0.10,
+            output_cost_per_m=0.40,
+            pricing_effective_date="2024-12-01",
+            pricing_verification_date="2026-06-01",
+            is_stale=True,
+            source_url="https://ai.google.dev/gemini-api/docs/deprecations"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["high_speed", "multimodal"],
+        strengths=["Historical low-latency agentic model"],
+        description="Shut down and retired on June 1, 2026. Superseded by Gemini 3.8 Flash.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://ai.google.dev/gemini-api/docs/deprecations",
+        verification_date="2026-06-01",
+        last_audit_date="2026-10-25",
+        retirement_date="2026-06-01",
+        replacement_model_id="gemini-3-8-flash"
+    ),
+    "gemini-1.5-pro": ModelMetadata(
+        model_id="gemini-1.5-pro",
+        display_name="Google Gemini 1.5 Pro (Retired)",
+        provider="google",
+        family="gemini-1.5",
+        context_window_tokens=2_000_000,
+        max_output_tokens=8_192,
+        pricing=ModelPricing(
+            input_cost_per_m=1.25,
+            output_cost_per_m=5.00,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2025-09-24",
+            is_stale=True,
+            source_url="https://ai.google.dev/gemini-api/docs/deprecations"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["long_context"],
+        strengths=["Historical 2M context window"],
+        description="Shut down and retired on September 24, 2025. Superseded by Gemini 3.8 / 4 series.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://ai.google.dev/gemini-api/docs/deprecations",
+        verification_date="2025-09-24",
+        last_audit_date="2026-10-25",
+        retirement_date="2025-09-24",
+        replacement_model_id="gemini-3-8-flash"
+    ),
+    "gemini-1.5-flash": ModelMetadata(
+        model_id="gemini-1.5-flash",
+        display_name="Google Gemini 1.5 Flash (Retired)",
+        provider="google",
+        family="gemini-1.5",
+        context_window_tokens=1_000_000,
+        max_output_tokens=8_192,
+        pricing=ModelPricing(
+            input_cost_per_m=0.075,
+            output_cost_per_m=0.30,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2025-09-24",
+            is_stale=True,
+            source_url="https://ai.google.dev/gemini-api/docs/deprecations"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["high_speed"],
+        strengths=["Historical low token pricing"],
+        description="Shut down and retired on September 24, 2025. Superseded by Gemini 3.8 Flash.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://ai.google.dev/gemini-api/docs/deprecations",
+        verification_date="2025-09-24",
+        last_audit_date="2026-10-25",
+        retirement_date="2025-09-24",
+        replacement_model_id="gemini-3-8-flash"
+    ),
+    "claude-3-7-sonnet": ModelMetadata(
+        model_id="claude-3-7-sonnet",
+        display_name="Anthropic Claude 3.7 Sonnet (Retired)",
+        provider="anthropic",
+        family="claude-3.7",
+        context_window_tokens=200_000,
+        max_output_tokens=64_000,
+        pricing=ModelPricing(
+            input_cost_per_m=3.00,
+            output_cost_per_m=15.00,
+            pricing_effective_date="2025-02-24",
+            pricing_verification_date="2026-02-19",
+            is_stale=True,
+            source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["hybrid_reasoning", "code_generation"],
+        strengths=["Historical hybrid reasoning"],
+        description="Deprecated October 28, 2025; retired on February 19, 2026. Superseded by Claude Sonnet 5.5.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
+        verification_date="2026-02-19",
+        last_audit_date="2026-10-25",
+        deprecation_date="2025-10-28",
+        retirement_date="2026-02-19",
+        replacement_model_id="claude-sonnet-5-5"
+    ),
+    "claude-3-5-haiku": ModelMetadata(
+        model_id="claude-3-5-haiku",
+        display_name="Anthropic Claude 3.5 Haiku (Retired)",
+        provider="anthropic",
+        family="claude-3.5",
+        context_window_tokens=200_000,
+        max_output_tokens=8_192,
+        pricing=ModelPricing(
+            input_cost_per_m=0.80,
+            output_cost_per_m=4.00,
+            pricing_effective_date="2024-11-01",
+            pricing_verification_date="2026-02-19",
+            is_stale=True,
+            source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["high_speed"],
+        strengths=["Historical fast intelligence"],
+        description="Deprecated December 19, 2025; retired on February 19, 2026. Superseded by Claude Haiku 5.5.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
+        verification_date="2026-02-19",
+        last_audit_date="2026-10-25",
+        deprecation_date="2025-12-19",
+        retirement_date="2026-02-19",
+        replacement_model_id="claude-haiku-5-5"
+    ),
+    "claude-3-5-sonnet": ModelMetadata(
+        model_id="claude-3-5-sonnet",
+        display_name="Anthropic Claude 3.5 Sonnet (Retired)",
+        provider="anthropic",
+        family="claude-3.5",
+        context_window_tokens=200_000,
+        max_output_tokens=8_192,
+        pricing=ModelPricing(
+            input_cost_per_m=3.00,
+            output_cost_per_m=15.00,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2025-10-28",
+            is_stale=True,
+            source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["code_generation"],
+        strengths=["Historical coding benchmark leader"],
+        description="Deprecated August 13, 2025; retired October 28, 2025. Superseded by Claude Sonnet 5.5.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
+        verification_date="2025-10-28",
+        last_audit_date="2026-10-25",
+        deprecation_date="2025-08-13",
+        retirement_date="2025-10-28",
+        replacement_model_id="claude-sonnet-5-5"
+    ),
+    "claude-3-opus": ModelMetadata(
+        model_id="claude-3-opus",
+        display_name="Anthropic Claude 3 Opus (Retired)",
+        provider="anthropic",
+        family="claude-3",
+        context_window_tokens=200_000,
+        max_output_tokens=4_096,
+        pricing=ModelPricing(
+            input_cost_per_m=15.00,
+            output_cost_per_m=75.00,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2026-01-05",
+            is_stale=True,
+            source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["complex_reasoning"],
+        strengths=["Historical deep analytical reasoning"],
+        description="Deprecated June 30, 2025; retired January 5, 2026. Superseded by Claude Opus 5.5.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
+        verification_date="2026-01-05",
+        last_audit_date="2026-10-25",
+        deprecation_date="2025-06-30",
+        retirement_date="2026-01-05",
+        replacement_model_id="claude-opus-5-5"
     ),
     "o1": ModelMetadata(
         model_id="o1",
-        display_name="OpenAI o1",
+        display_name="OpenAI o1 (Retired)",
         provider="openai",
         family="o1",
         context_window_tokens=200_000,
@@ -192,19 +598,24 @@ DEFAULT_MODELS: Dict[str, ModelMetadata] = {
             input_cost_per_m=15.00,
             output_cost_per_m=60.00,
             pricing_effective_date="2024-12-01",
-            source_url="https://openai.com/api/pricing"
+            pricing_verification_date="2026-10-23",
+            is_stale=True,
+            source_url="https://platform.openai.com/docs/deprecations"
         ),
         tokenizer_name="o200k_base",
-        capabilities=["complex_reasoning", "code_generation", "security_analysis", "math_and_science"],
-        strengths=["Deep internal chain-of-thought", "Hard algorithmic problem solving", "Architectural security design"],
-        description="OpenAI's frontier reasoning model designed for complex multi-step reasoning, math, and code architecture.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://platform.openai.com/docs/models#o1",
-        verification_date="2025-02-15"
+        capabilities=["complex_reasoning"],
+        strengths=["Historical chain-of-thought reasoning"],
+        description="Shut down and retired on October 23, 2026 per official OpenAI API lifecycle. Superseded by GPT-6 Astra.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.openai.com/docs/deprecations#o1",
+        verification_date="2026-10-23",
+        last_audit_date="2026-10-25",
+        retirement_date="2026-10-23",
+        replacement_model_id="gpt-6-astra"
     ),
     "o3-mini": ModelMetadata(
         model_id="o3-mini",
-        display_name="OpenAI o3-mini",
+        display_name="OpenAI o3-mini (Retired)",
         provider="openai",
         family="o3",
         context_window_tokens=200_000,
@@ -213,365 +624,265 @@ DEFAULT_MODELS: Dict[str, ModelMetadata] = {
             input_cost_per_m=1.10,
             output_cost_per_m=4.40,
             pricing_effective_date="2025-01-31",
-            source_url="https://openai.com/api/pricing"
+            pricing_verification_date="2026-10-23",
+            is_stale=True,
+            source_url="https://platform.openai.com/docs/deprecations"
         ),
         tokenizer_name="o200k_base",
-        capabilities=["complex_reasoning", "code_generation", "stem_reasoning", "fast_inference"],
-        strengths=["High-speed reasoning", "Exceptional coding benchmark scores", "Competitive STEM cost efficiency"],
-        description="Cost-effective reasoning model from OpenAI providing advanced STEM and coding reasoning at low latency.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://platform.openai.com/docs/models#o3-mini",
-        verification_date="2025-02-15"
-    ),
-
-    # -----------------------------------------------------------------------
-    # OpenAI Deprecated & Retired Models (Excluded from default recommendations)
-    # Source: https://platform.openai.com/docs/deprecations
-    # -----------------------------------------------------------------------
-    "gpt-4-turbo": ModelMetadata(
-        model_id="gpt-4-turbo",
-        display_name="OpenAI GPT-4 Turbo (Deprecated)",
-        provider="openai",
-        family="gpt",
-        context_window_tokens=128_000,
-        max_output_tokens=4_096,
-        pricing=ModelPricing(
-            input_cost_per_m=10.00,
-            output_cost_per_m=30.00,
-            pricing_effective_date="2024-10-01",
-            source_url="https://platform.openai.com/docs/pricing"
-        ),
-        tokenizer_name="cl100k_base",
-        capabilities=["complex_reasoning", "code_generation", "security_analysis"],
-        strengths=["Deep multi-step reasoning", "High architectural comprehension"],
-        description="Previous-generation flagship from OpenAI; deprecated in favor of GPT-4o.",
-        lifecycle_status=LifecycleStatus.DEPRECATED,
-        source_url="https://platform.openai.com/docs/deprecations#gpt-4-turbo",
-        verification_date="2025-02-15",
-        deprecation_date="2024-10-01",
-        replacement_model_id="gpt-4o"
+        capabilities=["complex_reasoning", "stem_reasoning"],
+        strengths=["Historical STEM reasoning"],
+        description="Shut down and retired on October 23, 2026 per official OpenAI API lifecycle. Superseded by GPT-6 Luna.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://platform.openai.com/docs/deprecations#o3-mini",
+        verification_date="2026-10-23",
+        last_audit_date="2026-10-25",
+        retirement_date="2026-10-23",
+        replacement_model_id="gpt-6-luna"
     ),
     "gpt-3.5-turbo": ModelMetadata(
         model_id="gpt-3.5-turbo",
         display_name="OpenAI GPT-3.5 Turbo (Retired)",
         provider="openai",
-        family="gpt",
+        family="gpt-3.5",
         context_window_tokens=16_385,
         max_output_tokens=4_096,
         pricing=ModelPricing(
             input_cost_per_m=0.50,
             output_cost_per_m=1.50,
             pricing_effective_date="2024-07-01",
+            pricing_verification_date="2024-07-01",
+            is_stale=True,
             source_url="https://platform.openai.com/docs/deprecations"
         ),
         tokenizer_name="cl100k_base",
         capabilities=["general_instruction"],
         strengths=["Legacy compatibility"],
-        description="Legacy 3.5 generation model; retired from active recommendation pool in favor of GPT-4o-mini.",
+        description="Retired July 2024. Superseded by GPT-6 Luna.",
         lifecycle_status=LifecycleStatus.RETIRED,
         source_url="https://platform.openai.com/docs/deprecations",
-        verification_date="2025-02-15",
-        deprecation_date="2024-07-01",
-        replacement_model_id="gpt-4o-mini"
+        verification_date="2024-07-01",
+        last_audit_date="2026-10-25",
+        retirement_date="2024-07-01",
+        replacement_model_id="gpt-6-luna"
     ),
-
-    # -----------------------------------------------------------------------
-    # Google Gemini Active Models
-    # Source: https://ai.google.dev/gemini-api/docs/models
-    # -----------------------------------------------------------------------
-    "gemini-2.0-flash": ModelMetadata(
-        model_id="gemini-2.0-flash",
-        display_name="Google Gemini 2.0 Flash",
-        provider="google",
-        family="gemini",
-        context_window_tokens=1_000_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=0.10,
-            output_cost_per_m=0.40,
-            pricing_effective_date="2024-12-01",
-            source_url="https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.0-flash"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["agentic_coding", "high_speed", "multimodal", "code_generation", "long_context"],
-        strengths=["Next-gen agentic capabilities", "Real-time multimodal responsiveness", "1M token context"],
-        description="Next-generation Gemini Flash model built for agentic execution, code generation, and low latency.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.0-flash",
-        verification_date="2025-02-15"
-    ),
-    "gemini-2.5-pro": ModelMetadata(
-        model_id="gemini-2.5-pro",
-        display_name="Google Gemini 2.5 Pro",
-        provider="google",
-        family="gemini",
-        context_window_tokens=2_000_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=1.25,
-            output_cost_per_m=5.00,
-            pricing_effective_date="2025-02-01",
-            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["deep_thinking", "complex_code", "data_analysis", "long_context", "multimodal"],
-        strengths=["2M token context window", "Advanced thinking & reasoning", "Cross-repository code synthesis"],
-        description="Google's premier thinking and reasoning model for complex STEM, deep code analysis, and large context.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro",
-        verification_date="2025-02-15"
-    ),
-    "gemini-2.5-flash": ModelMetadata(
-        model_id="gemini-2.5-flash",
-        display_name="Google Gemini 2.5 Flash",
-        provider="google",
-        family="gemini",
-        context_window_tokens=1_000_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=0.10,
-            output_cost_per_m=0.40,
-            pricing_effective_date="2025-02-01",
-            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["high_speed", "price_performance", "long_context", "general_instruction", "code_generation"],
-        strengths=["Optimal price-to-performance", "1M token context", "High-volume throughput"],
-        description="Fast, cost-effective multimodal model for high-frequency reasoning and code execution.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash",
-        verification_date="2025-02-15"
-    ),
-
-    # -----------------------------------------------------------------------
-    # Google Gemini Retired Models (Shut down / EOL per official documentation)
-    # Source: https://ai.google.dev/gemini-api/docs/deprecations
-    # -----------------------------------------------------------------------
-    "gemini-1.5-pro": ModelMetadata(
-        model_id="gemini-1.5-pro",
-        display_name="Google Gemini 1.5 Pro (Retired)",
-        provider="google",
-        family="gemini",
-        context_window_tokens=2_000_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=1.25,
-            output_cost_per_m=5.00,
-            pricing_effective_date="2024-10-01",
-            source_url="https://ai.google.dev/gemini-api/docs/deprecations"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["long_context", "code_generation", "data_analysis"],
-        strengths=["Historical 2M context window"],
-        description="Previous-generation Gemini model; retired and turned off on September 24, 2025. Superseded by Gemini 2.5 Pro.",
-        lifecycle_status=LifecycleStatus.RETIRED,
-        source_url="https://ai.google.dev/gemini-api/docs/deprecations",
-        verification_date="2025-02-15",
-        deprecation_date="2025-05-27",
-        replacement_model_id="gemini-2.5-pro"
-    ),
-    "gemini-1.5-flash": ModelMetadata(
-        model_id="gemini-1.5-flash",
-        display_name="Google Gemini 1.5 Flash (Retired)",
-        provider="google",
-        family="gemini",
-        context_window_tokens=1_000_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=0.075,
-            output_cost_per_m=0.30,
-            pricing_effective_date="2024-10-01",
-            source_url="https://ai.google.dev/gemini-api/docs/deprecations"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["long_context", "high_speed"],
-        strengths=["Historical low token pricing"],
-        description="Previous-generation lightweight model; retired and turned off on September 24, 2025. Superseded by Gemini 2.5 Flash.",
-        lifecycle_status=LifecycleStatus.RETIRED,
-        source_url="https://ai.google.dev/gemini-api/docs/deprecations",
-        verification_date="2025-02-15",
-        deprecation_date="2025-05-27",
-        replacement_model_id="gemini-2.5-flash"
-    ),
-
-    # -----------------------------------------------------------------------
-    # Anthropic Claude Active Models
-    # Source: https://docs.anthropic.com/en/docs/about-claude/models
-    # Pricing: https://www.anthropic.com/pricing
-    # -----------------------------------------------------------------------
-    "claude-3-7-sonnet": ModelMetadata(
-        model_id="claude-3-7-sonnet",
-        display_name="Anthropic Claude 3.7 Sonnet",
-        provider="anthropic",
-        family="claude",
-        context_window_tokens=200_000,
-        max_output_tokens=64_000,
-        pricing=ModelPricing(
-            input_cost_per_m=3.00,
-            output_cost_per_m=15.00,
-            pricing_effective_date="2025-02-24",
-            source_url="https://www.anthropic.com/pricing"
-        ),
-        tokenizer_name="claude_calibrated_heuristic",
-        capabilities=["hybrid_reasoning", "code_generation", "security_analysis", "agentic_coding", "nuanced_writing"],
-        strengths=["State-of-the-art hybrid reasoning & coding", "Extended thinking mode", "Advanced full-stack tool use"],
-        description="Anthropic's flagship hybrid reasoning model delivering leading coding, reasoning, and agentic performance.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-3-7-sonnet",
-        verification_date="2025-02-24"
-    ),
-    "claude-3-5-haiku": ModelMetadata(
-        model_id="claude-3-5-haiku",
-        display_name="Anthropic Claude 3.5 Haiku",
-        provider="anthropic",
-        family="claude",
-        context_window_tokens=200_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=0.80,
-            output_cost_per_m=4.00,
-            pricing_effective_date="2024-11-01",
-            source_url="https://www.anthropic.com/pricing"
-        ),
-        tokenizer_name="claude_calibrated_heuristic",
-        capabilities=["high_speed", "code_generation", "general_instruction", "data_analysis"],
-        strengths=["Fast code generation", "Affordable Anthropic intelligence", "Structured data parsing"],
-        description="Anthropic's fastest, most responsive model providing high code performance at low cost.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-3-5-haiku",
-        verification_date="2025-02-15"
-    ),
-
-    # -----------------------------------------------------------------------
-    # Anthropic Deprecated & Retired Models (Excluded from default recommendations)
-    # Source: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
-    # -----------------------------------------------------------------------
-    "claude-3-5-sonnet": ModelMetadata(
-        model_id="claude-3-5-sonnet",
-        display_name="Anthropic Claude 3.5 Sonnet (Deprecated)",
-        provider="anthropic",
-        family="claude",
-        context_window_tokens=200_000,
-        max_output_tokens=8_192,
-        pricing=ModelPricing(
-            input_cost_per_m=3.00,
-            output_cost_per_m=15.00,
-            pricing_effective_date="2024-10-01",
-            source_url="https://www.anthropic.com/pricing"
-        ),
-        tokenizer_name="claude_calibrated_heuristic",
-        capabilities=["code_generation", "security_analysis", "reasoning_and_math"],
-        strengths=["Historical benchmark-leading coding"],
-        description="Superseded by Claude 3.7 Sonnet; deprecated on Anthropic platforms in August 2025.",
-        lifecycle_status=LifecycleStatus.DEPRECATED,
-        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        verification_date="2025-02-24",
-        deprecation_date="2025-08-13",
-        replacement_model_id="claude-3-7-sonnet"
-    ),
-    "claude-3-opus": ModelMetadata(
-        model_id="claude-3-opus",
-        display_name="Anthropic Claude 3 Opus (Retired)",
-        provider="anthropic",
-        family="claude",
-        context_window_tokens=200_000,
-        max_output_tokens=4_096,
-        pricing=ModelPricing(
-            input_cost_per_m=15.00,
-            output_cost_per_m=75.00,
-            pricing_effective_date="2024-10-01",
-            source_url="https://www.anthropic.com/pricing"
-        ),
-        tokenizer_name="claude_calibrated_heuristic",
-        capabilities=["complex_reasoning", "creative_and_writing"],
-        strengths=["Historical deep analytical reasoning"],
-        description="Legacy 3.0 flagship; deprecated June 30, 2025 and retired January 5, 2026. Superseded by Claude 3.7 Sonnet.",
-        lifecycle_status=LifecycleStatus.RETIRED,
-        source_url="https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        verification_date="2025-02-15",
-        deprecation_date="2025-06-30",
-        replacement_model_id="claude-3-7-sonnet"
-    ),
-
-    # -----------------------------------------------------------------------
-    # xAI Grok Active Models
-    # Source: https://docs.x.ai/
-    # -----------------------------------------------------------------------
     "grok-3": ModelMetadata(
         model_id="grok-3",
-        display_name="xAI Grok 3",
+        display_name="xAI Grok 3 (Retired)",
         provider="xai",
-        family="grok",
+        family="grok-3",
         context_window_tokens=131_072,
         max_output_tokens=8_192,
         pricing=ModelPricing(
             input_cost_per_m=3.00,
             output_cost_per_m=15.00,
             pricing_effective_date="2025-02-15",
+            pricing_verification_date="2026-09-01",
+            is_stale=True,
             source_url="https://docs.x.ai/"
         ),
         tokenizer_name="grok_calibrated_heuristic",
-        capabilities=["complex_reasoning", "code_generation", "stem_reasoning", "structured_output"],
-        strengths=["Advanced multi-step reasoning", "Deep mathematical modeling", "Direct code architecture"],
-        description="xAI's frontier reasoning and coding model with deep analytical comprehension and 131K context window.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.x.ai/docs/models#grok-3",
-        verification_date="2025-02-15"
+        capabilities=["complex_reasoning"],
+        strengths=["Historical reasoning tier"],
+        description="Phased out from primary API in favor of Grok 4.7. Superseded by Grok 4.7.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://docs.x.ai/docs/deprecations",
+        verification_date="2026-09-01",
+        last_audit_date="2026-10-25",
+        retirement_date="2026-09-01",
+        replacement_model_id="grok-4-7"
     ),
     "grok-3-mini": ModelMetadata(
         model_id="grok-3-mini",
-        display_name="xAI Grok 3 Mini",
+        display_name="xAI Grok 3 Mini (Retired)",
         provider="xai",
-        family="grok",
+        family="grok-3",
         context_window_tokens=131_072,
         max_output_tokens=8_192,
         pricing=ModelPricing(
             input_cost_per_m=0.30,
             output_cost_per_m=0.50,
             pricing_effective_date="2025-02-15",
+            pricing_verification_date="2026-09-01",
+            is_stale=True,
             source_url="https://docs.x.ai/"
         ),
         tokenizer_name="grok_calibrated_heuristic",
-        capabilities=["fast_reasoning", "code_generation", "general_instruction", "data_analysis"],
-        strengths=["High cost efficiency", "Fast multi-step inference", "Affordable technical processing"],
-        description="Fast, cost-efficient reasoning model from xAI providing strong reasoning at fraction-of-a-dollar token rates.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.x.ai/docs/models#grok-3-mini",
-        verification_date="2025-02-15"
+        capabilities=["fast_reasoning"],
+        strengths=["Historical lightweight tier"],
+        description="Phased out from primary API in favor of Grok 4.3. Superseded by Grok 4.3.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://docs.x.ai/docs/deprecations",
+        verification_date="2026-09-01",
+        last_audit_date="2026-10-25",
+        retirement_date="2026-09-01",
+        replacement_model_id="grok-4-3"
     ),
-
-    # -----------------------------------------------------------------------
-    # xAI Retired Models (Excluded from default recommendations)
-    # -----------------------------------------------------------------------
     "grok-2": ModelMetadata(
         model_id="grok-2",
         display_name="xAI Grok 2 (Retired)",
         provider="xai",
-        family="grok",
+        family="grok-2",
         context_window_tokens=131_072,
         max_output_tokens=4_096,
         pricing=ModelPricing(
             input_cost_per_m=2.00,
             output_cost_per_m=10.00,
             pricing_effective_date="2024-08-01",
+            pricing_verification_date="2025-02-01",
+            is_stale=True,
             source_url="https://docs.x.ai/"
         ),
         tokenizer_name="grok_calibrated_heuristic",
-        capabilities=["general_instruction", "data_analysis"],
+        capabilities=["general_instruction"],
         strengths=["Legacy xAI foundation model"],
-        description="Previous-generation xAI model; retired in favor of Grok 3.",
+        description="Retired February 2025. Superseded by Grok 4.7.",
         lifecycle_status=LifecycleStatus.RETIRED,
         source_url="https://docs.x.ai/docs/deprecations",
-        verification_date="2025-02-15",
-        deprecation_date="2025-02-01",
-        replacement_model_id="grok-3"
+        verification_date="2025-02-01",
+        last_audit_date="2026-10-25",
+        retirement_date="2025-02-01",
+        replacement_model_id="grok-4-7"
+    ),
+
+    # -----------------------------------------------------------------------
+    # Historical Deprecated Models (Excluded from default recommendations)
+    # -----------------------------------------------------------------------
+    "gpt-4o": ModelMetadata(
+        model_id="gpt-4o",
+        display_name="OpenAI GPT-4o (Deprecated)",
+        provider="openai",
+        family="gpt-4o",
+        context_window_tokens=128_000,
+        max_output_tokens=16_384,
+        pricing=ModelPricing(
+            input_cost_per_m=2.50,
+            output_cost_per_m=10.00,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2026-09-15",
+            is_stale=True,
+            source_url="https://platform.openai.com/docs/deprecations#gpt-4o"
+        ),
+        tokenizer_name="o200k_base",
+        capabilities=["code_generation", "security_analysis"],
+        strengths=["Historical multi-modal workhorse"],
+        description="Deprecated per OpenAI official API roadmap with shutdown scheduled January 14, 2027. Superseded by GPT-6 Sol.",
+        lifecycle_status=LifecycleStatus.DEPRECATED,
+        source_url="https://platform.openai.com/docs/deprecations#gpt-4o",
+        verification_date="2026-09-15",
+        last_audit_date="2026-10-25",
+        deprecation_date="2026-09-15",
+        replacement_model_id="gpt-6-sol"
+    ),
+    "gpt-4o-mini": ModelMetadata(
+        model_id="gpt-4o-mini",
+        display_name="OpenAI GPT-4o-mini (Deprecated)",
+        provider="openai",
+        family="gpt-4o",
+        context_window_tokens=128_000,
+        max_output_tokens=16_384,
+        pricing=ModelPricing(
+            input_cost_per_m=0.15,
+            output_cost_per_m=0.60,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2026-09-15",
+            is_stale=True,
+            source_url="https://platform.openai.com/docs/deprecations#gpt-4o-mini"
+        ),
+        tokenizer_name="o200k_base",
+        capabilities=["fast_inference"],
+        strengths=["Historical lightweight cost-effective tier"],
+        description="Deprecated per OpenAI official API roadmap with shutdown scheduled January 14, 2027. Superseded by GPT-6 Luna.",
+        lifecycle_status=LifecycleStatus.DEPRECATED,
+        source_url="https://platform.openai.com/docs/deprecations#gpt-4o-mini",
+        verification_date="2026-09-15",
+        last_audit_date="2026-10-25",
+        deprecation_date="2026-09-15",
+        replacement_model_id="gpt-6-luna"
+    ),
+    "gpt-4-turbo": ModelMetadata(
+        model_id="gpt-4-turbo",
+        display_name="OpenAI GPT-4 Turbo (Deprecated)",
+        provider="openai",
+        family="gpt-4",
+        context_window_tokens=128_000,
+        max_output_tokens=4_096,
+        pricing=ModelPricing(
+            input_cost_per_m=10.00,
+            output_cost_per_m=30.00,
+            pricing_effective_date="2024-10-01",
+            pricing_verification_date="2024-10-01",
+            is_stale=True,
+            source_url="https://platform.openai.com/docs/deprecations#gpt-4-turbo"
+        ),
+        tokenizer_name="cl100k_base",
+        capabilities=["complex_reasoning"],
+        strengths=["Historical architectural reasoning"],
+        description="Deprecated October 2024. Superseded by GPT-6 Astra.",
+        lifecycle_status=LifecycleStatus.DEPRECATED,
+        source_url="https://platform.openai.com/docs/deprecations#gpt-4-turbo",
+        verification_date="2024-10-01",
+        last_audit_date="2026-10-25",
+        deprecation_date="2024-10-01",
+        replacement_model_id="gpt-6-astra"
+    ),
+    "gemini-2.5-pro": ModelMetadata(
+        model_id="gemini-2.5-pro",
+        display_name="Google Gemini 2.5 Pro (Deprecated/Limited)",
+        provider="google",
+        family="gemini-2.5",
+        context_window_tokens=1_048_576,
+        max_output_tokens=65_536,
+        pricing=ModelPricing(
+            input_cost_per_m=1.25,
+            output_cost_per_m=5.00,
+            pricing_effective_date="2025-02-01",
+            pricing_verification_date="2026-07-15",
+            is_stale=True,
+            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["deep_thinking"],
+        strengths=["Historical reasoning tier"],
+        description="Limited access: restricted strictly to historical accounts. Superseded by Gemini 4 Argon.",
+        lifecycle_status=LifecycleStatus.DEPRECATED,
+        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro",
+        verification_date="2026-07-15",
+        last_audit_date="2026-10-25",
+        deprecation_date="2026-07-15",
+        replacement_model_id="gemini-4-argon"
+    ),
+    "gemini-2.5-flash": ModelMetadata(
+        model_id="gemini-2.5-flash",
+        display_name="Google Gemini 2.5 Flash (Deprecated/Limited)",
+        provider="google",
+        family="gemini-2.5",
+        context_window_tokens=1_048_576,
+        max_output_tokens=65_536,
+        pricing=ModelPricing(
+            input_cost_per_m=0.10,
+            output_cost_per_m=0.40,
+            pricing_effective_date="2025-02-01",
+            pricing_verification_date="2026-07-15",
+            is_stale=True,
+            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash"
+        ),
+        tokenizer_name="gemini_256k_bpe_calibrated",
+        capabilities=["high_speed"],
+        strengths=["Historical price-performance"],
+        description="Limited access: restricted strictly to historical accounts. Superseded by Gemini 3.8 Flash.",
+        lifecycle_status=LifecycleStatus.DEPRECATED,
+        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash",
+        verification_date="2026-07-15",
+        last_audit_date="2026-10-25",
+        deprecation_date="2026-07-15",
+        replacement_model_id="gemini-3-8-flash"
     )
 }
 
 
 # ===========================================================================
 # Category B: IDEs & Coding Assistants Catalogue
-# Verified against official product documentation (Feb 2025)
+# Audited: 2026-10-25 against official product documentation
 # ===========================================================================
 DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
     "cursor": IDEProductMetadata(
@@ -582,14 +893,14 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
         availability=ProductAvailability.GENERALLY_AVAILABLE,
         supported_os=["macOS", "Windows", "Linux"],
         editor_integration=["VS Code Fork (Native Editor)"],
-        supported_models=["Claude 3.7 Sonnet", "Claude 3.5 Sonnet", "GPT-4o", "Cursor Fast Models", "Custom API Key"],
+        supported_models=["Claude Sonnet 5.5", "GPT-6 Sol", "Cursor Fast Models", "Custom API Key"],
         key_capabilities=[
             "Composer multi-file agent",
             "Local codebase vector indexing",
             "Inline code edits",
-            "Background cloud agents (Bugbot)",
-            "Terminal command assistance",
-            "Git diff review and staging"
+            "Cloud Agents and Bugbot code review",
+            "Terminal command generation and execution",
+            "Origin cloud code hosting"
         ],
         context_features=[
             "Manual developer context curation (@files, @folders, @docs, @git)",
@@ -599,16 +910,17 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
         execution_capabilities=[
             "Direct terminal command generation and execution",
             "Interactive multi-file diff application",
-            "Background agent execution"
+            "Autonomous background agent execution"
         ],
-        pricing_tier_summary="Free ($0, limited agent quota); Pro ($20/mo, fast requests); Business ($40/user/mo)",
+        pricing_tier_summary="Free ($0 evaluation); Plus ($8/mo); Pro ($20-$30/mo); Super ($100/mo); Ultra ($200/mo); Teams ($40/user/mo)",
         pricing_model="freemium_subscription",
-        free_tier="Free ($0, limited completions and agent requests)",
-        paid_tiers=["Pro ($20/month)", "Business ($40/user/month)"],
-        privacy_statement="Privacy Mode available on all plans; code not stored or used for model training. SOC 2 certified.",
+        free_tier="Free ($0, limited Tab completions and starter agent requests)",
+        paid_tiers=["Plus ($8/mo)", "Pro ($20-$30/mo)", "Super ($100/mo)", "Ultra ($200/mo)", "Teams ($40/user/mo)"],
+        privacy_statement="Privacy Mode by default on Teams/Enterprise; customer code not retained or used for model training. SOC 2 certified.",
         description="AI-first fork of VS Code featuring Composer for multi-file agentic code generation and local codebase indexing.",
-        source_url="https://cursor.com/",
-        verification_date="2025-02-15",
+        source_url="https://cursor.com/pricing",
+        verification_date="2026-09-10",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "multi_file_agent": 0.95,
             "repo_indexing": 0.94,
@@ -617,7 +929,8 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "ecosystem_integration": 0.85,
             "privacy_controls": 0.90,
             "plan_affordability": 0.88
-        }
+        },
+        unverified_fields=[]
     ),
     "windsurf": IDEProductMetadata(
         product_id="windsurf",
@@ -627,7 +940,7 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
         availability=ProductAvailability.GENERALLY_AVAILABLE,
         supported_os=["macOS", "Windows", "Linux"],
         editor_integration=["AI-first Editor (VS Code Compatible)"],
-        supported_models=["SWE-1 Cascade proprietary agent", "Claude 3.7 Sonnet", "GPT-4o", "Claude 3.5 Haiku"],
+        supported_models=["SWE-1 Cascade proprietary agent", "Claude Sonnet 5.5", "GPT-6", "Gemini 4"],
         key_capabilities=[
             "Cascade autonomous flow agent",
             "Fast Context automatic routing",
@@ -646,14 +959,15 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "Automatic compile error resolution",
             "Live web preview environments"
         ],
-        pricing_tier_summary="Free ($0, unlimited completions + starter agent quota); Pro ($20/mo); Teams ($40/user/mo)",
+        pricing_tier_summary="Free ($0 unlimited completions + starter agent quota); Pro ($20/mo); Max ($200/mo); Teams ($40/user/mo)",
         pricing_model="freemium_subscription",
         free_tier="Free ($0, unlimited tab completions + limited Cascade quota)",
-        paid_tiers=["Pro ($20/month)", "Teams ($40/user/month)", "Enterprise (Custom)"],
+        paid_tiers=["Pro ($20/month)", "Max ($200/month)", "Teams ($40/user/month)", "Enterprise (Custom)"],
         privacy_statement="Zero data retention option available for enterprise; paid accounts do not train models on code.",
         description="Agent-first IDE by Codeium built around continuous flow collaboration and proactive context routing.",
-        source_url="https://windsurf.com/",
-        verification_date="2025-02-15",
+        source_url="https://windsurf.com/pricing",
+        verification_date="2026-08-15",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "multi_file_agent": 0.94,
             "repo_indexing": 0.92,
@@ -662,7 +976,8 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "ecosystem_integration": 0.84,
             "privacy_controls": 0.88,
             "plan_affordability": 0.92
-        }
+        },
+        unverified_fields=[]
     ),
     "github-copilot": IDEProductMetadata(
         product_id="github-copilot",
@@ -672,7 +987,7 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
         availability=ProductAvailability.GENERALLY_AVAILABLE,
         supported_os=["macOS", "Windows", "Linux"],
         editor_integration=["VS Code", "Visual Studio", "JetBrains IDEs", "Xcode", "Neovim", "Copilot Workspace"],
-        supported_models=["GPT-4o", "Claude 3.5/3.7 Sonnet", "Gemini 2.0", "Copilot Specialized Coding Models"],
+        supported_models=["GPT-6", "Claude Sonnet 5.5", "Gemini 4", "Copilot Specialized Coding Models"],
         key_capabilities=[
             "Copilot Chat side-panel & inline",
             "Agent Mode multi-file editing",
@@ -691,14 +1006,15 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "Workspace Agent multi-file planning",
             "PR generation and automated review comments"
         ],
-        pricing_tier_summary="Free ($0, 2,000 completions/mo); Pro ($10/mo); Business ($19/user/mo); Enterprise ($39/user/mo)",
+        pricing_tier_summary="Free ($0, 2k completions/mo); Pro ($10/mo); Pro+ ($39/mo); Max ($100/mo); Business ($19/user/mo); Enterprise ($39/user/mo)",
         pricing_model="freemium_subscription",
         free_tier="Free ($0, 2,000 code completions/month, limited chat)",
-        paid_tiers=["Pro ($10/month)", "Business ($19/user/month)", "Enterprise ($39/user/month)"],
-        privacy_statement="Enterprise zero data retention; code snippets and prompts are not retained or used to train models.",
+        paid_tiers=["Pro ($10/month)", "Pro+ ($39/month)", "Max ($100/month)", "Business ($19/user/month)", "Enterprise ($39/user/month)"],
+        privacy_statement="Enterprise zero data retention; code snippets and prompts are not retained or used for training.",
         description="Comprehensive developer assistant by GitHub and Microsoft integrated natively across major IDEs and GitHub.",
         source_url="https://github.com/features/copilot",
-        verification_date="2025-02-15",
+        verification_date="2026-09-01",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "multi_file_agent": 0.87,
             "repo_indexing": 0.90,
@@ -707,7 +1023,8 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "ecosystem_integration": 0.98,
             "privacy_controls": 0.96,
             "plan_affordability": 0.95
-        }
+        },
+        unverified_fields=[]
     ),
     "google-antigravity": IDEProductMetadata(
         product_id="google-antigravity",
@@ -717,7 +1034,7 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
         availability=ProductAvailability.GENERALLY_AVAILABLE,
         supported_os=["macOS", "Windows", "Linux"],
         editor_integration=["Standalone Desktop Command Center", "Antigravity IDE", "Extensions (VS Code, JetBrains, Zed)"],
-        supported_models=["Google Gemini 2.5 Pro", "Gemini 2.5 Flash", "Gemini 3 Series", "Argon Agentic Family"],
+        supported_models=["Google Gemini 4 Argon", "Gemini 3.8 Flash"],
         key_capabilities=[
             "Autonomous multi-surface software engineering agents",
             "Asynchronous agent orchestration manager",
@@ -738,14 +1055,15 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "Persistent background task management",
             "One-shot and recurring timer scheduling"
         ],
-        pricing_tier_summary="Included in Google Developer / Cloud AI tiers; preview and developer access",
+        pricing_tier_summary="Included in Google Developer / Cloud AI tiers; developer access",
         pricing_model="cloud_developer_tier",
-        free_tier="Developer preview access with Google Cloud / developer credentials",
+        free_tier="Developer tier access with Google Cloud credentials",
         paid_tiers=["Google Cloud Vertex AI / Enterprise developer billing"],
         privacy_statement="Governed by Google Cloud Enterprise AI privacy terms; customer prompt code not used for model training.",
         description="Google's agent-first development platform featuring autonomous multi-surface agents and verifiable artifacts.",
         source_url="https://antigravity.google/",
-        verification_date="2025-02-15",
+        verification_date="2026-08-20",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "multi_file_agent": 0.98,
             "repo_indexing": 0.95,
@@ -754,14 +1072,15 @@ DEFAULT_IDES: Dict[str, IDEProductMetadata] = {
             "ecosystem_integration": 0.92,
             "privacy_controls": 0.94,
             "plan_affordability": 0.85
-        }
+        },
+        unverified_fields=[]
     )
 }
 
 
 # ===========================================================================
 # Category C: AI App Builders Catalogue
-# Verified against official product documentation (Feb 2025)
+# Audited: 2026-10-25 against official product documentation
 # ===========================================================================
 DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
     "v0-dev": AppBuilderMetadata(
@@ -772,7 +1091,7 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
         availability=ProductAvailability.GENERALLY_AVAILABLE,
         primary_stacks=["React", "Next.js (App Router)", "Tailwind CSS", "shadcn/ui", "TypeScript"],
         supported_backends=["Next.js Server Actions", "Vercel Serverless Functions", "External REST/GraphQL APIs"],
-        database_auth_support=["Bring-your-own database", "External Supabase/Neon/Auth.js integration"],
+        database_auth_support=["Bring-your-own database", "External Supabase/Neon integration"],
         deployment_options=["1-click native Vercel deployment", "Shareable preview URLs"],
         github_integration="Direct code export to GitHub repositories, copy-paste code snippets, CLI component add",
         source_code_export="100% clean Next.js React component code export with zero proprietary lock-in",
@@ -786,7 +1105,7 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
         supported_models=["Vercel Frontier AI Routing (Claude, GPT, Custom UI Models)"],
         pricing_tier_summary="Free ($0, monthly generation credits); Premium ($20/mo, expanded credits and team features)",
         pricing_model="freemium_credits",
-        free_tier="Free ($0, limited daily generation credits and public sharing)",
+        free_tier="Free ($0, limited monthly generation credits and public sharing)",
         paid_tiers=["Premium ($20/month)", "Enterprise (Custom)"],
         documented_limitations=[
             "Frontend-centric: does not provision managed relational databases or auth servers out-of-the-box",
@@ -794,7 +1113,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
         ],
         description="Vercel's generative UI tool outputting production-grade React, Next.js, and shadcn/ui component code.",
         source_url="https://v0.dev/",
-        verification_date="2025-02-15",
+        verification_date="2026-08-10",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "full_stack_backend": 0.70,
             "frontend_ui_quality": 0.98,
@@ -802,7 +1122,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "code_export_github": 0.95,
             "autonomous_iteration": 0.86,
             "pricing_accessibility": 0.90
-        }
+        },
+        unverified_fields=[]
     ),
     "bolt-new": AppBuilderMetadata(
         product_id="bolt-new",
@@ -823,7 +1144,7 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "Real-time live browser preview with hot-module reload",
             "Autonomous error fixing and package dependency resolution"
         ],
-        supported_models=["Anthropic Claude 3.7/3.5 Sonnet", "DeepSeek", "OpenAI GPT-4o"],
+        supported_models=["Anthropic Claude, OpenAI GPT, DeepSeek"],
         pricing_tier_summary="Free ($0, daily token allowances ~300K/day); Pro ($20/mo, expanded runtime & tokens)",
         pricing_model="freemium_credits",
         free_tier="Free ($0, daily token quota ~300K tokens/day, public projects)",
@@ -834,7 +1155,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
         ],
         description="In-browser AI app builder powered by StackBlitz WebContainers for instant full-stack web prototypes.",
         source_url="https://bolt.new/",
-        verification_date="2025-02-15",
+        verification_date="2026-08-10",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "full_stack_backend": 0.84,
             "frontend_ui_quality": 0.89,
@@ -842,7 +1164,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "code_export_github": 0.92,
             "autonomous_iteration": 0.92,
             "pricing_accessibility": 0.92
-        }
+        },
+        unverified_fields=[]
     ),
     "lovable-dev": AppBuilderMetadata(
         product_id="lovable-dev",
@@ -863,18 +1186,19 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "Two-way GitHub synchronization enabling team PR workflows",
             "Autonomous error detection and repair during build"
         ],
-        supported_models=["Lovable Custom Agent with Claude 3.7/3.5 Sonnet backend"],
+        supported_models=["Lovable Custom Agent with Claude backend"],
         pricing_tier_summary="Free ($0, 5 daily credits); Starter ($20/mo, ~100 edits); Pro ($50/mo, high usage)",
         pricing_model="freemium_credits",
         free_tier="Free ($0, 5 daily generation credits)",
         paid_tiers=["Starter ($20/month)", "Pro ($50/month)", "Enterprise (Custom)"],
         documented_limitations=[
-            "Optimized tightly around React/Vite/Supabase architecture; alternative backends (e.g. Django/Spring) require decoupling",
+            "Optimized tightly around React/Vite/Supabase architecture; alternative backends require decoupling",
             "Credit depletion on deep complex multi-turn architectural iterations"
         ],
         description="Full-stack AI web app builder tightly integrated with Supabase for instant database, authentication, and UI generation.",
         source_url="https://lovable.dev/",
-        verification_date="2025-02-15",
+        verification_date="2026-08-10",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "full_stack_backend": 0.96,
             "frontend_ui_quality": 0.93,
@@ -882,7 +1206,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "code_export_github": 0.96,
             "autonomous_iteration": 0.93,
             "pricing_accessibility": 0.86
-        }
+        },
+        unverified_fields=[]
     ),
     "replit-agent": AppBuilderMetadata(
         product_id="replit-agent",
@@ -903,7 +1228,7 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "Integrated PostgreSQL database with automatic connection strings",
             "Real-time multiplayer collaborative coding"
         ],
-        supported_models=["Replit Agent 4 (Anthropic Claude, OpenAI GPT, Replit Code Models)"],
+        supported_models=["Replit Agent (Claude, GPT, Replit Code Models)"],
         pricing_tier_summary="Free ($0, basic cloud workspace); Core ($17–$20/mo); Teams ($95+/user/mo)",
         pricing_model="freemium_subscription",
         free_tier="Free ($0, public cloud workspaces with limited compute)",
@@ -914,7 +1239,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
         ],
         description="Autonomous cloud software development platform supporting multi-language full-stack apps with persistent Linux execution.",
         source_url="https://replit.com/",
-        verification_date="2025-02-15",
+        verification_date="2026-08-10",
+        last_audit_date="2026-10-25",
         criteria_scores={
             "full_stack_backend": 0.98,
             "frontend_ui_quality": 0.85,
@@ -922,7 +1248,8 @@ DEFAULT_APP_BUILDERS: Dict[str, AppBuilderMetadata] = {
             "code_export_github": 0.94,
             "autonomous_iteration": 0.94,
             "pricing_accessibility": 0.88
-        }
+        },
+        unverified_fields=[]
     )
 }
 
@@ -979,11 +1306,8 @@ class ModelRegistry:
         if lifecycle_status is not None:
             models = [m for m in models if m.lifecycle_status == lifecycle_status]
         elif not include_deprecated:
-            # Default recommendation pool: STRICTLY ACTIVE models only
-            models = [
-                m for m in models
-                if m.lifecycle_status == LifecycleStatus.ACTIVE
-            ]
+            # Default recommendation pool: STRICTLY eligible ACTIVE models only
+            models = [m for m in models if self.is_model_eligible(m.model_id, ProductCategory.FOUNDATION_MODEL)]
 
         return models
 
@@ -1010,13 +1334,22 @@ class ModelRegistry:
     def is_model_eligible(self, item_id: str, category: ProductCategory = ProductCategory.FOUNDATION_MODEL) -> bool:
         """
         Checks if an item is eligible for the default recommendation pool.
-        Foundation models must be ACTIVE; products must be GENERALLY_AVAILABLE or PUBLIC_BETA.
+        Foundation models must be ACTIVE, verified, with known non-stale pricing.
+        Products must be GENERALLY_AVAILABLE or PUBLIC_BETA.
         """
         if category == ProductCategory.FOUNDATION_MODEL:
             m = self.get_foundation_model(item_id)
             if not m:
                 return False
-            return m.lifecycle_status == LifecycleStatus.ACTIVE
+            # Reject if not ACTIVE
+            if m.lifecycle_status != LifecycleStatus.ACTIVE:
+                return False
+            # Reject if pricing is unknown, stale, or missing
+            if not m.pricing.is_known or m.pricing.is_stale:
+                return False
+            if m.pricing.input_cost_per_m is None or m.pricing.output_cost_per_m is None:
+                return False
+            return True
 
         elif category == ProductCategory.IDE_ASSISTANT:
             ide = self.get_ide(item_id)
