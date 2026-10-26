@@ -124,6 +124,11 @@ class RankedModel:
     benchmark_status: str  # "unavailable (not fabricated)"
     reasoning: str
     lifecycle_status: str = "active"
+    score_type: str = "heuristic_recommendation_score"
+    score_disclaimer: str = (
+        "Relative multi-criteria heuristic recommendation score [0.0, 1.0]. "
+        "Not a measured benchmark, answer quality, latency, or probability of success."
+    )
 
 
 def _generate_candidate_reasoning(
@@ -135,8 +140,11 @@ def _generate_candidate_reasoning(
 ) -> str:
     """
     Generates transparent, evidence-based rationale without generic marketing claims.
+    Clearly identifies scores as heuristic recommendation scores.
     """
-    reasons = []
+    reasons = [
+        "Heuristic recommendation score (not measured answer quality)"
+    ]
 
     # 1. Suitability summary
     if norm_suit >= 0.85:
@@ -337,9 +345,14 @@ def rank_models_topsis(
     # Context (Benefit, log scale)
     ctx_vals = [math.log10(c.context_window_tokens) for c in candidates]
 
-    # Cost (Cost, log scale shifted positive)
+    # Cost (Cost, log scale shifted positive; missing or unknown pricing penalized with maximum cost)
+    known_costs = [c.total_cost_usd for c in candidates if c.total_cost_usd is not None and c.total_cost_usd > 0 and c.pricing_status == "known"]
+    max_known_cost = max(known_costs) if known_costs else 1.0
+    penalty_cost = max(100.0, max_known_cost * 100.0)
+
     raw_costs = [
-        math.log10(max(1e-9, c.total_cost_usd)) if (c.total_cost_usd is not None and c.total_cost_usd > 0) else 5.0
+        math.log10(max(1e-9, c.total_cost_usd)) if (c.total_cost_usd is not None and c.total_cost_usd > 0 and c.pricing_status == "known")
+        else math.log10(penalty_cost)
         for c in candidates
     ]
     shift = abs(min(raw_costs)) + 1.0
@@ -455,6 +468,11 @@ class RankedProduct:
     supported_models_or_stacks: List[str]
     source_url: str
     verification_date: str
+    score_type: str = "heuristic_recommendation_score"
+    score_disclaimer: str = (
+        "Relative multi-criteria heuristic recommendation score [0.0, 1.0]. "
+        "Not a measured benchmark, productivity score, or guarantee of success."
+    )
 
 
 IDE_PRESET_WEIGHTS: Dict[str, Dict[str, float]] = {
@@ -698,63 +716,63 @@ def _generate_product_reasoning(
     if category == "ide_assistant":
         if pid == "google-antigravity":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Delivers autonomous multi-surface agents with asynchronous task execution, "
                 "verifiable artifacts and diff reviews, and terminal/browser tool integration."
             )
         elif pid == "cursor":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Features Composer for multi-file agentic code generation, local codebase vector indexing, "
-                "and flexible frontier model selection (Claude 3.7 Sonnet, GPT-4o). "
+                "and flexible frontier model selection (Claude Sonnet 5.5, GPT-6 Sol). "
                 f"Pricing: {pricing}."
             )
         elif pid == "windsurf":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Excels in continuous flow human-agent collaboration with Cascade Fast Context routing, "
                 "inline multi-file edits, and autonomous terminal execution. "
                 f"Pricing: {pricing}."
             )
         elif pid == "github-copilot":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Provides the broadest editor ecosystem integration (VS Code, JetBrains, Visual Studio, Xcode), "
                 "Copilot Workspace Agent mode, automated PR reviews, and robust enterprise zero data retention. "
                 f"Pricing: {pricing}."
             )
         else:
-            return f"{dname} by {vendor} evaluated under verified IDE capabilities with score {score:.3f}."
+            return f"{dname} by {vendor} evaluated under documented IDE capabilities with heuristic recommendation score {score:.3f}."
 
     elif category == "app_builder":
         if pid == "lovable-dev":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Leading full-stack web MVP builder featuring native Supabase PostgreSQL database integration, "
                 "built-in authentication, Row-Level Security, and two-way GitHub repository synchronization."
             )
         elif pid == "replit-agent":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Autonomous full-stack development platform with full Linux backend execution, "
                 "multi-language runtime support (Python FastAPI, Node.js, Go), and native PostgreSQL persistence. "
                 f"Pricing: {pricing}."
             )
         elif pid == "v0-dev":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "Top-tier generative UI tool producing production-ready React, Next.js, and shadcn/ui components "
                 "with 1-click Vercel deployment. Note: frontend-focused; bring-your-own-backend required. "
                 f"Pricing: {pricing}."
             )
         elif pid == "bolt-new":
             return (
-                f"{dname} by {vendor} ranks with relative score {score:.3f}. "
+                f"{dname} by {vendor} ranks with heuristic recommendation score {score:.3f}. "
                 "In-browser full-stack execution powered by StackBlitz WebContainers. "
                 "Features interactive Plan & Build agent modes, container terminal access, and instant hosting. "
                 f"Pricing: {pricing}."
             )
         else:
-            return f"{dname} by {vendor} evaluated under verified app-builder capabilities with score {score:.3f}."
+            return f"{dname} by {vendor} evaluated under documented app-builder capabilities with heuristic recommendation score {score:.3f}."
 
-    return f"{dname} ranks with relative score {score:.3f}."
+    return f"{dname} ranks with heuristic recommendation score {score:.3f}."

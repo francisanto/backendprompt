@@ -59,7 +59,9 @@ class ModelComparisonDetails:
     provenance: Dict[str, str]
     lifecycle_status: str = "active"
     source_url: str = ""
-    verification_date: str = "2025-02-15"
+    verification_date: str = "2026-10-25"
+    last_audit_date: str = "2026-10-25"
+    unverified_fields: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -81,6 +83,8 @@ class ProductComparisonDetails:
     source_url: str
     verification_date: str
     provenance: Dict[str, str]
+    last_audit_date: str = "2026-10-25"
+    unverified_fields: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -133,6 +137,7 @@ class ModelComparisonEngine:
         preset_str = preset.value if hasattr(preset, "value") else str(preset)
 
         # ===================================================================
+        # ===================================================================
         # Category A: Foundation Models
         # ===================================================================
         if category == ProductCategory.FOUNDATION_MODEL:
@@ -141,10 +146,8 @@ class ModelComparisonEngine:
                 target_models = []
                 for mid in model_ids:
                     m = self.registry.get_foundation_model(mid)
-                    if m:
+                    if m and (include_deprecated or self.registry.is_model_eligible(m.model_id, category)):
                         target_models.append(m)
-                if not target_models:
-                    target_models = self.registry.list_models(include_deprecated=include_deprecated)
             else:
                 target_models = self.registry.list_models(include_deprecated=include_deprecated)
 
@@ -220,7 +223,9 @@ class ModelComparisonEngine:
                     },
                     lifecycle_status=model.lifecycle_status.value if hasattr(model.lifecycle_status, "value") else str(model.lifecycle_status),
                     source_url=model.source_url,
-                    verification_date=model.verification_date
+                    verification_date=model.verification_date,
+                    last_audit_date=getattr(model, "last_audit_date", "2026-10-25"),
+                    unverified_fields=getattr(model, "unverified_fields", [])
                 )
 
             ranked = rank_models(
@@ -247,9 +252,9 @@ class ModelComparisonEngine:
                 provenance_declarations={
                     "offline_execution": "100% local execution; zero prompts transmitted to external model APIs.",
                     "token_counting": "OpenAI token counts are exact via official tiktoken; Gemini, Claude, and Grok token counts are calibrated offline estimates.",
-                    "pricing_data": "Public pricing snapshot verified against official documentation (Feb 2025; USD per 1M tokens).",
+                    "pricing_data": "Public pricing snapshot verified against official documentation (audited 2026-10-25; USD per 1M tokens).",
                     "benchmarks": "No third-party quality benchmarks or live latencies are fabricated.",
-                    "scoring_interpretation": "Scores represent relative multi-criteria trade-off rankings under selected preset, not absolute correctness probabilities."
+                    "scoring_interpretation": "Scores represent relative multi-criteria heuristic recommendation trade-offs [0.0, 1.0], not measured answer quality or latency."
                 }
             )
 
@@ -261,10 +266,8 @@ class ModelComparisonEngine:
                 target_ides = []
                 for pid in model_ids:
                     ide = self.registry.get_ide(pid)
-                    if ide:
+                    if ide and (include_deprecated or self.registry.is_model_eligible(ide.product_id, category)):
                         target_ides.append(ide)
-                if not target_ides:
-                    target_ides = self.registry.list_ides(include_discontinued=include_deprecated)
             else:
                 target_ides = self.registry.list_ides(include_discontinued=include_deprecated)
 
@@ -295,11 +298,13 @@ class ModelComparisonEngine:
                     description=ide.description,
                     source_url=ide.source_url,
                     verification_date=ide.verification_date,
+                    last_audit_date=getattr(ide, "last_audit_date", "2026-10-25"),
+                    unverified_fields=getattr(ide, "unverified_fields", []),
                     provenance={
                         "category": "ide_assistant",
-                        "scoring_method": f"Multi-criteria {method.value.upper()} on verified IDE capabilities and prompt relevance",
+                        "scoring_method": f"Multi-criteria {method.value.upper()} on documented IDE capabilities and prompt relevance",
                         "execution_type": "Offline capability-based ranking; no remote IDE or model calls",
-                        "pricing_source": "Official vendor pricing documentation (Feb 2025)",
+                        "pricing_source": "Official vendor pricing documentation (audited 2026-10-25)",
                         "privacy_verification": ide.privacy_statement
                     }
                 )
@@ -321,7 +326,7 @@ class ModelComparisonEngine:
                     "offline_execution": "100% local execution; evaluates developer environments and coding assistants without API calls.",
                     "criteria_evaluated": "Multi-file agent autonomy, codebase indexing, terminal execution, model flexibility, ecosystem integration, privacy controls, and plan affordability.",
                     "product_distinction": "IDEs are evaluated as development environments, not as raw foundation models.",
-                    "scoring_interpretation": "Relative multi-criteria score reflecting suitability for requested coding and repository tasks."
+                    "scoring_interpretation": "Relative multi-criteria heuristic recommendation score [0.0, 1.0] reflecting suitability for requested coding tasks."
                 }
             )
 
@@ -333,10 +338,8 @@ class ModelComparisonEngine:
                 target_builders = []
                 for pid in model_ids:
                     b = self.registry.get_app_builder(pid)
-                    if b:
+                    if b and (include_deprecated or self.registry.is_model_eligible(b.product_id, category)):
                         target_builders.append(b)
-                if not target_builders:
-                    target_builders = self.registry.list_app_builders(include_discontinued=include_deprecated)
             else:
                 target_builders = self.registry.list_app_builders(include_discontinued=include_deprecated)
 
@@ -367,11 +370,13 @@ class ModelComparisonEngine:
                     description=b.description,
                     source_url=b.source_url,
                     verification_date=b.verification_date,
+                    last_audit_date=getattr(b, "last_audit_date", "2026-10-25"),
+                    unverified_fields=getattr(b, "unverified_fields", []),
                     provenance={
                         "category": "app_builder",
-                        "scoring_method": f"Multi-criteria {method.value.upper()} on verified platform capabilities and prompt requirement alignment",
+                        "scoring_method": f"Multi-criteria {method.value.upper()} on documented platform capabilities and prompt requirement alignment",
                         "execution_type": "Offline platform evaluation; no remote builder or code generation calls",
-                        "pricing_source": "Official vendor pricing documentation (Feb 2025)",
+                        "pricing_source": "Official vendor pricing documentation (audited 2026-10-25)",
                         "code_export_verification": b.source_code_export
                     }
                 )
