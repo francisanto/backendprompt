@@ -1,21 +1,26 @@
 #!/usr/bin/env python3
 """
 PromptShield AI — Terminal Command-Line Interface (CLI).
-Unified security analysis and risk assessment platform for prompts.
+Local Prompt Security & Model Recommendation Workspace.
 
-Evaluates prompts automatically across three integrated layers:
-1. Prompt Security Model: Detects adversarial prompt injection, jailbreaks, and malice.
-2. Application Risk Model: Predicts architectural attack surfaces implied by requested features,
-   correlated with explicitly declared security controls and feature negations.
-3. Sensitive Data Detector: Flags hardcoded API keys, secrets, and credentials (rule-based proof).
+Unified terminal workspace providing:
+1. Prompt Security Analysis: Evaluates adversarial malice, prompt injection, and jailbreaks.
+2. Application Risk Model: Predicts 15 architectural attack surfaces implied by requested features.
+3. Sensitive Data Detector: Flags hardcoded API keys, secrets, and credentials (rule-based proof with masking).
+4. Offline Multi-Model Comparison: Evaluates foundation models via WSM and TOPSIS without provider API calls.
+5. IDE Coding Assistant Comparison: Multi-file agents, repo indexing, and terminal execution comparison.
+6. AI App Builder Comparison: Full-stack backend, database/auth support, and code export comparison.
+7. Model & Product Catalogue Inspection: Verifies exact model IDs, pricing status, tokenizers, and lifecycle.
+8. Text File Analysis: Validated local file ingestion for security analysis and model comparison.
 """
 
 import argparse
+import math
 import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 # Ensure repository root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent
@@ -24,6 +29,19 @@ if str(REPO_ROOT) not in sys.path:
 
 from analyzers.prompt_analyzer import analyze_prompt
 from analyzers.sensitive_data_detector import PATTERNS, redact_secret
+from analyzers.model_comparison.engine import comparison_engine, ModelComparisonReport
+from analyzers.model_comparison.registry import (
+    registry,
+    ProductCategory,
+    LifecycleStatus,
+    ProductAvailability,
+    ModelMetadata,
+    IDEProductMetadata,
+    AppBuilderMetadata,
+)
+from analyzers.model_comparison.ranker import RankingMethod, RankingPreset, PRESET_WEIGHTS
+from analyzers.model_comparison.task_classifier import task_classifier
+from analyzers.model_comparison.tokenizer_adapters import get_tokenizer_adapter
 
 
 # ANSI Colors with automatic TTY / NO_COLOR detection
@@ -167,8 +185,6 @@ def mask_sensitive_text(prompt: str) -> str:
         for m in reversed(matches):
             if pattern_def["type"] == "hardcoded_password_assignment":
                 span = m.span(1)
-            elif pattern_def["type"] == "db_connection_uri":
-                span = m.span(0)
             else:
                 span = m.span(0)
             val = masked[span[0]:span[1]]
@@ -254,7 +270,6 @@ def generate_recommendations(analysis_result: Dict[str, Any]) -> List[Dict[str, 
             unmitigated_surfaces = [r for r in detected_risks if r not in mitigated_surfaces]
         else:
             unmitigated_surfaces = detected_risks
-        declared_controls = app_risk.get("declared_controls") or []
 
         # 3A. Surfaces with Declared Defenses (Residual Risk Review)
         if mitigated_surfaces:
@@ -351,14 +366,14 @@ def format_security_report(
     # Prompt Summary
     sanitized_prompt = mask_sensitive_text(prompt)
     preview = sanitized_prompt if len(sanitized_prompt) <= 300 else f"{sanitized_prompt[:297]}..."
-    
+
     char_count = len(prompt)
     word_count = len(prompt.split())
     line_count = len(prompt.splitlines())
 
     lines.append(f"\n{colors.BOLD}[ PROMPT SUMMARY ]{colors.RESET}")
     lines.append(f"  Length: {char_count} chars | {word_count} words | {line_count} line(s)")
-    lines.append(f"  Prompt Content (Secrets Redacted for Display):")
+    lines.append("  Prompt Content (Secrets Redacted for Display):")
     for pline in preview.splitlines():
         lines.append(f"    {pline}")
 
@@ -414,7 +429,6 @@ def format_security_report(
         suppressed_risks = app_risk.get("suppressed_risks") or []
         detected_risks = app_risk.get("detected_risks") or []
         mitigated_surfaces = app_risk.get("mitigated_surfaces") or {}
-        unmitigated_surfaces = app_risk.get("unmitigated_surfaces") or []
 
         # 2A. Explicitly Stated Security Controls
         lines.append(f"  {colors.BOLD}Explicitly Stated Security Controls:{colors.RESET}")
@@ -532,7 +546,7 @@ def format_security_report(
     lines.append(f"  Prompt Security Model:     {colors.GREEN}ONLINE{colors.RESET}" if sec_model_ok else f"  Prompt Security Model:     {colors.RED}OFFLINE{colors.RESET}")
     lines.append(f"  Application Risk Model:    {colors.GREEN}ONLINE{colors.RESET}" if app_model_ok else f"  Application Risk Model:    {colors.RED}OFFLINE{colors.RESET}")
     lines.append(f"  Sensitive Data Detector:   {colors.GREEN}ACTIVE (Rule-based heuristics){colors.RESET}")
-    
+
     status_color = colors.GREEN if overall_status == "success" else (colors.YELLOW if overall_status == "partial_success" else colors.RED)
     lines.append(f"  Overall Orchestrator:      {status_color}{overall_status.upper()}{colors.RESET}")
     lines.append(rule)
@@ -540,16 +554,20 @@ def format_security_report(
     return "\n".join(lines)
 
 
-def read_multiline_prompt(colors: Colors) -> Optional[str]:
+def read_multiline_prompt(
+    colors: Colors,
+    prompt_label: str = "Enter custom application prompt below.",
+    sentinel: str = "END"
+) -> Optional[str]:
     """
     Interactively reads a multiline prompt from the terminal until
     the user types 'END' on a line by itself.
-    Returns None if the user issues an exit command or interrupts.
+    Returns None if the user issues an exit/cancel command or interrupts.
     """
-    print(f"\n{colors.BOLD}Enter custom application prompt below.{colors.RESET}")
+    print(f"\n{colors.BOLD}{prompt_label}{colors.RESET}")
     print("• You may paste or enter multi-line text.")
-    print(f"• Type {colors.BOLD}'END'{colors.RESET} on a new line when finished to run security analysis.")
-    print(f"• Type {colors.BOLD}'exit'{colors.RESET} or {colors.BOLD}'quit'{colors.RESET} on the first line to quit.")
+    print(f"• Type {colors.BOLD}'{sentinel}'{colors.RESET} on a new line when finished to proceed.")
+    print(f"• Type {colors.BOLD}'exit'{colors.RESET}, {colors.BOLD}'quit'{colors.RESET}, or {colors.BOLD}'cancel'{colors.RESET} on the first line to return.")
     print("-" * 80)
 
     lines: List[str] = []
@@ -559,12 +577,12 @@ def read_multiline_prompt(colors: Colors) -> Optional[str]:
         except (KeyboardInterrupt, EOFError):
             return None
 
-        # Check for immediate exit
-        if not lines and line.strip().lower() in {"exit", "quit", "q"}:
+        # Check for immediate exit/cancel
+        if not lines and line.strip().lower() in {"exit", "quit", "q", "cancel", ":cancel", ":q"}:
             return None
 
         # Check for END sentinel (case-insensitive)
-        if line.strip().upper() == "END":
+        if line.strip().upper() == sentinel.upper():
             break
 
         lines.append(line)
@@ -574,9 +592,7 @@ def read_multiline_prompt(colors: Colors) -> Optional[str]:
 
 
 def show_prompt_improvement_notice(colors: Colors) -> None:
-    """
-    Displays the planned feature notice for automated prompt improvement.
-    """
+    """Displays feature status notice for automated prompt improvement."""
     print("\n" + "=" * 80)
     print(f"{colors.BOLD}{colors.CYAN}       PROMPT IMPROVEMENT & OPTIMIZATION (PLANNED FEATURE){colors.RESET}")
     print("=" * 80)
@@ -587,17 +603,14 @@ def show_prompt_improvement_notice(colors: Colors) -> None:
     print(f"    {colors.GREEN}✓{colors.RESET} Security Controls & Constraints Extractor (Argon2id, CSP, RBAC, etc.)")
     print(f"    {colors.GREEN}✓{colors.RESET} Sensitive Data Detection (Credentials, API Keys, Private Keys)")
     print(f"    {colors.GREEN}✓{colors.RESET} Decoupled Severity & Actionable Remediation Engine")
-    print(f"    {colors.GREEN}✓{colors.RESET} Unified FastAPI REST Endpoints & Terminal CLI")
-    print("\n  Planned Future Modules:")
-    print(f"    {colors.DIM}• Automated Prompt Rewriting & Hardening")
-    print("    • Token Usage & Cost Estimation")
-    print(f"    • Multi-Model (GPT / Claude / Gemini) Comparative Scoring{colors.RESET}")
+    print(f"    {colors.GREEN}✓{colors.RESET} Multi-Category Offline Comparison (Foundation Models, IDEs, App Builders)")
+    print(f"    {colors.GREEN}✓{colors.RESET} Multi-Criteria WSM and TOPSIS Ranking")
     print("=" * 80)
 
 
 def handle_next_action_menu(colors: Colors) -> str:
     """
-    Presents the post-report action menu and returns the selected action.
+    Presents post-report action menu (preserved for test backwards-compatibility).
     Returns: 'improve', 'another', or 'exit'.
     """
     while True:
@@ -631,58 +644,839 @@ def handle_next_action_menu(colors: Colors) -> str:
             print(f"{colors.RED}[!] Invalid choice. Please enter 1, 2, or 3.{colors.RESET}")
 
 
-def run_interactive_cli(colors: Colors) -> None:
-    """
-    Runs the main interactive loop for PromptShield AI terminal workflow.
-    """
-    print(get_banner(colors))
-    print("Welcome to PromptShield AI — Unified Prompt Security Analysis Platform.")
+# ===========================================================================
+# Option 1: Prompt Security Analysis
+# ===========================================================================
 
+def cli_prompt_security_analysis(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
+    """Runs interactive prompt security and architectural risk analysis."""
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}1. PROMPT SECURITY & ARCHITECTURAL RISK ANALYSIS{colors.RESET}")
+    print("=" * 80)
+
+    if preloaded_prompt:
+        prompt = preloaded_prompt.strip()
+    else:
+        prompt = read_multiline_prompt(
+            colors,
+            prompt_label="Enter the prompt to analyze for security vulnerabilities:",
+            sentinel="END"
+        )
+
+    if prompt is None:
+        print(f"\n{colors.YELLOW}[i] Security analysis cancelled. Returning to main menu.{colors.RESET}")
+        return
+
+    if not prompt:
+        print(f"\n{colors.YELLOW}[!] Warning: Prompt cannot be empty or contain only whitespace.{colors.RESET}")
+        return
+
+    print(f"\n{colors.CYAN}Running unified security analysis (100% offline)...{colors.RESET}")
+    try:
+        analysis_result = analyze_prompt(prompt, analysis_mode="both")
+    except Exception as e:
+        print(f"\n{colors.RED}[ERROR] Unexpected error during analysis: {e}{colors.RESET}")
+        analysis_result = {
+            "prompt": prompt,
+            "analysis_mode": "both",
+            "status": "error",
+            "error": str(e),
+            "model_availability": {"prompt_security_model": False, "application_risk_model": False},
+            "prompt_security": {"status": "error", "error": str(e)},
+            "application_risks": {"status": "error", "error": str(e)},
+            "sensitive_data": {"detected": False, "findings_count": 0, "findings": []}
+        }
+
+    report_text = format_security_report(prompt, analysis_result, colors=colors)
+    print(report_text)
+
+    try:
+        input(f"\n{colors.CYAN}Press [Enter] to return to main menu...{colors.RESET}")
+    except (KeyboardInterrupt, EOFError):
+        pass
+
+
+# ===========================================================================
+# Option 2: Offline Foundation Model Comparison
+# ===========================================================================
+
+def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
+    """Interactively compares verified foundation models 100% locally."""
     while True:
-        prompt = read_multiline_prompt(colors)
+        print("\n" + "=" * 80)
+        print(f"{colors.BOLD}{colors.CYAN}2. OFFLINE FOUNDATION MODEL COMPARISON{colors.RESET}")
+        print("=" * 80)
+        print(f"{colors.DIM}Strictly 100% offline. Zero provider API calls, zero telemetry.{colors.RESET}")
+
+        if preloaded_prompt:
+            prompt = preloaded_prompt.strip()
+        else:
+            prompt = read_multiline_prompt(
+                colors,
+                prompt_label="Describe the coding, reasoning, or instruction task (or paste prompt):",
+                sentinel="END"
+            )
 
         if prompt is None:
-            print(f"\n{colors.CYAN}Exiting PromptShield AI. Goodbye!{colors.RESET}\n")
-            sys.exit(0)
+            print(f"\n{colors.YELLOW}[i] Model comparison cancelled. Returning to main menu.{colors.RESET}")
+            return
 
         if not prompt:
-            print(f"\n{colors.YELLOW}[!] Warning: Prompt cannot be empty or contain only whitespace.{colors.RESET}")
-            print("    Please enter a valid application prompt to analyze.\n")
-            continue
+            print(f"\n{colors.YELLOW}[!] Warning: Task description cannot be empty.{colors.RESET}")
+            return
 
-        print(f"\n{colors.CYAN}Running unified security analysis...{colors.RESET}")
+        # 1. Local Task Classification
+        task_res = task_classifier.classify_task(prompt)
+        inferred_task = task_res.predicted_category
+        conf = task_res.confidence
+
+        print(f"\n{colors.BOLD}Task Classification (Local Model):{colors.RESET}")
+        print(f"  Inferred Category:   {colors.GREEN}{inferred_task}{colors.RESET} ({conf * 100:.1f}% confidence)")
+        print("  Available categories: [1] code_generation  [2] code_explanation  [3] security_analysis")
+        print("                        [4] general_instruction  [5] reasoning_math  [6] data_extraction")
+
         try:
-            analysis_result = analyze_prompt(prompt, analysis_mode="both")
-        except Exception as e:
-            print(f"\n{colors.RED}[ERROR] Unexpected error during analysis: {e}{colors.RESET}")
-            analysis_result = {
-                "prompt": prompt,
-                "analysis_mode": "both",
-                "status": "error",
-                "error": str(e),
-                "model_availability": {"prompt_security_model": False, "application_risk_model": False},
-                "prompt_security": {"status": "error", "error": str(e)},
-                "application_risks": {"status": "error", "error": str(e)},
-                "sensitive_data": {"detected": False, "findings_count": 0, "findings": []}
-            }
+            task_choice = input(f"{colors.CYAN}Press [Enter] to accept inferred task, or enter number (1-6) / 'c' to cancel:{colors.RESET} ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return
 
-        # Print report
-        report_text = format_security_report(prompt, analysis_result, colors=colors)
-        print(report_text)
+        if task_choice in {"c", "cancel"}:
+            return
 
-        # Next action menu
-        action = handle_next_action_menu(colors)
-        if action == "exit":
+        task_mapping = {
+            "1": "code_generation",
+            "2": "code_explanation",
+            "3": "security_analysis",
+            "4": "general_instruction",
+            "5": "reasoning_math",
+            "6": "data_extraction"
+        }
+        chosen_task = task_mapping.get(task_choice, inferred_task)
+
+        # 2. Show Eligible Foundation Models
+        eligible = registry.list_models(include_deprecated=False)
+        print(f"\n{colors.BOLD}Eligible Active Foundation Models ({len(eligible)} models):{colors.RESET}")
+        print("-" * 80)
+        print(f" {'#':<3} {'Model ID':<22} {'Provider':<11} {'Context':<9} {'Pricing ($/1M in/out)':<24} {'Tokenizer'}")
+        print("-" * 80)
+        for idx, m in enumerate(eligible, 1):
+            ctx_str = f"{m.context_window_tokens // 1000}K" if m.context_window_tokens < 1_000_000 else f"{m.context_window_tokens // 1_000_000}M"
+            pricing_str = f"${m.pricing.input_cost_per_m:.2f} / ${m.pricing.output_cost_per_m:.2f}"
+            tok_method = "exact" if m.provider == "openai" else "approx"
+            print(f" {idx:<3} {m.model_id:<22} {m.provider:<11} {ctx_str:<9} {pricing_str:<24} {m.tokenizer_name} ({tok_method})")
+        print("-" * 80)
+
+        # 3. Model Selection
+        try:
+            model_sel = input(f"{colors.CYAN}Select models [Enter for all {len(eligible)}, or comma-separated numbers/IDs, 'c' to cancel]:{colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        if model_sel.lower() in {"c", "cancel"}:
+            return
+
+        selected_ids: Optional[List[str]] = None
+        if model_sel:
+            parts = [p.strip() for p in model_sel.split(",") if p.strip()]
+            resolved: List[str] = []
+            for p in parts:
+                if p.isdigit():
+                    num = int(p)
+                    if 1 <= num <= len(eligible):
+                        resolved.append(eligible[num - 1].model_id)
+                elif registry.get_foundation_model(p):
+                    resolved.append(p)
+            if resolved:
+                selected_ids = list(dict.fromkeys(resolved))
+
+        # 4. Ranking Method Selection
+        print(f"\n{colors.BOLD}Ranking Algorithm:{colors.RESET}")
+        print("  [1] Weighted Sum Model (WSM) [default]")
+        print("  [2] TOPSIS (Technique for Order of Preference by Similarity to Ideal Solution)")
+        try:
+            method_input = input(f"{colors.CYAN}Select ranking method (1-2) [default=1]:{colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        method = RankingMethod.TOPSIS if method_input == "2" else RankingMethod.WEIGHTED_SUM
+
+        # 5. Ranking Preset Selection
+        print(f"\n{colors.BOLD}Optimization Preset:{colors.RESET}")
+        print("  [1] balanced (45% suitability, 35% cost, 20% context) [default]")
+        print("  [2] cost_optimized (20% suitability, 70% cost, 10% context)")
+        print("  [3] quality_optimized (80% suitability, 5% cost, 15% context)")
+        print("  [4] long_context (25% suitability, 25% cost, 50% context)")
+        try:
+            preset_input = input(f"{colors.CYAN}Select preset (1-4) [default=1]:{colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        preset_map = {
+            "1": RankingPreset.BALANCED,
+            "2": RankingPreset.COST_OPTIMIZED,
+            "3": RankingPreset.QUALITY_OPTIMIZED,
+            "4": RankingPreset.LONG_CONTEXT
+        }
+        preset = preset_map.get(preset_input, RankingPreset.BALANCED)
+
+        # 6. Run Comparison
+        print(f"\n{colors.CYAN}Evaluating models locally using {method.value.upper()} ({preset.value} preset)...{colors.RESET}")
+        report = comparison_engine.compare_prompt(
+            prompt=prompt,
+            category=ProductCategory.FOUNDATION_MODEL,
+            method=method,
+            preset=preset,
+            model_ids=selected_ids
+        )
+
+        # 7. Display Results Table
+        print("\n" + "=" * 80)
+        print(f"{colors.BOLD}{colors.CYAN}             FOUNDATION MODEL RECOMMENDATION RANKINGS ({method.value.upper()}){colors.RESET}")
+        print("=" * 80)
+        print(f" {'Rank':<5} {'Model ID':<22} {'Provider':<10} {'Score':<8} {'Suitability':<12} {'Est. Cost':<11} {'Method'}")
+        print("-" * 80)
+        for rm in report.ranked_models:
+            cost_str = f"${rm.estimated_cost_usd:.5f}" if rm.estimated_cost_usd is not None else "N/A"
+            conf_str = f"{rm.token_count_method} ({rm.token_count_confidence:.2f})"
+            print(f" #{rm.rank:<4} {rm.model_id:<22} {rm.provider:<10} {rm.score:<8.4f} {rm.suitability_score:<12.2f} {cost_str:<11} {conf_str}")
+        print("-" * 80)
+
+        # 8. Detailed breakdown of Top 3 models
+        print(f"\n{colors.BOLD}TOP RECOMMENDATION BREAKDOWN:{colors.RESET}")
+        for rm in report.ranked_models[:3]:
+            details = report.model_details.get(rm.model_id)
+            print(f"\n  {colors.BOLD}#{rm.rank} — {rm.display_name} ({rm.provider}){colors.RESET}")
+            print(f"     Recommendation Score: {colors.GREEN}{rm.score:.4f}{colors.RESET} (Heuristic score [0.0 - 1.0], not measured benchmark)")
+            print(f"     Suitability Rating:   {rm.suitability_score:.2f} / 1.00")
+            if details and details.cost_breakdown:
+                cb = details.cost_breakdown
+                print(f"     Estimated Cost:       ${cb.total_estimated_cost_usd:.5f} (Input: ${cb.input_cost_usd:.5f}, Output: ${cb.output_cost_usd:.5f})")
+                print(f"     Pricing Rates:        ${cb.input_cost_per_m:.2f} in / ${cb.output_cost_per_m:.2f} out per 1M tokens")
+            print(f"     Token Count:          {rm.token_count} prompt tokens ({rm.token_count_method}, confidence {rm.token_count_confidence:.2f})")
+            if rm.token_count_disclaimer:
+                print(f"     Token Disclaimer:     {colors.DIM}{rm.token_count_disclaimer}{colors.RESET}")
+            print(f"     Evaluation Rationale: {rm.reasoning}")
+
+        # 9. Excluded Models Explanation
+        print("\n" + "-" * 80)
+        print(f"{colors.BOLD}EXCLUDED MODELS & MISSING DATA POLICY:{colors.RESET}")
+        print("  • gemini-2.5-pro, gemini-2.5-flash: UNVERIFIED future releases (missing public pricing, ID, context).")
+        print("  • grok-3, grok-3-mini:              PREVIEW status (missing production API endpoint, public pricing).")
+        print("  • gpt-4-turbo:                      DEPRECATED (superseded by gpt-4o).")
+        print("  • gpt-3.5-turbo, gemini-1.0-pro:    RETIRED legacy models.")
+        print("  Policy: Default rankings strictly exclude unverified, preview, and legacy models.")
+        print("          Missing prices receive maximum cost penalty and are never treated as free.")
+        print("=" * 80)
+
+        # 10. Post-comparison options
+        if preloaded_prompt:
+            try:
+                input(f"\n{colors.CYAN}Press [Enter] to return to main menu...{colors.RESET}")
+            except (KeyboardInterrupt, EOFError):
+                pass
+            return
+
+        print(f"\n  [1] Compare another task or prompt")
+        print(f"  [2] Return to main menu")
+        try:
+            next_act = input(f"{colors.CYAN}Select option (1-2) [default=2]:{colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        if next_act != "1":
+            return
+
+
+# ===========================================================================
+# Option 3: IDE Coding Assistant Comparison
+# ===========================================================================
+
+def cli_compare_ide_assistants(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
+    """Compares verified IDE coding assistants using workflow and tooling criteria."""
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}3. IDE CODING ASSISTANT COMPARISON{colors.RESET}")
+    print("=" * 80)
+    print(f"{colors.DIM}Evaluates multi-file agents, repo indexing, terminal execution, and privacy.{colors.RESET}")
+
+    if preloaded_prompt:
+        prompt = preloaded_prompt.strip()
+    else:
+        try:
+            print("\nEnter coding task or workflow requirements (or press [Enter] for general coding):")
+            user_input = input(f"{colors.CYAN}>{colors.RESET} ").strip()
+            prompt = user_input or "Multi-file repository refactoring, terminal execution, and code completions"
+        except (KeyboardInterrupt, EOFError):
+            return
+
+    # Ranking method selection
+    print("\nRanking Algorithm: [1] Weighted Sum Model (WSM) [default]  [2] TOPSIS")
+    try:
+        method_input = input(f"{colors.CYAN}Select method (1-2) [default=1]:{colors.RESET} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+    method = RankingMethod.TOPSIS if method_input == "2" else RankingMethod.WEIGHTED_SUM
+
+    print(f"\n{colors.CYAN}Evaluating IDE assistants locally using {method.value.upper()}...{colors.RESET}")
+    report = comparison_engine.compare_prompt(
+        prompt=prompt,
+        category=ProductCategory.IDE_ASSISTANT,
+        method=method
+    )
+
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}              IDE CODING ASSISTANT RANKINGS ({method.value.upper()}){colors.RESET}")
+    print("=" * 80)
+    print(f" {'Rank':<5} {'Product ID':<18} {'Display Name':<20} {'Vendor':<18} {'Score':<8} {'Pricing Summary'}")
+    print("-" * 80)
+    for rp in report.ranked_products or []:
+        print(f" #{rp.rank:<4} {rp.product_id:<18} {rp.display_name:<20} {rp.vendor:<18} {rp.score:<8.4f} {rp.pricing_summary}")
+    print("-" * 80)
+
+    # Detailed product cards
+    for rp in report.ranked_products or []:
+        ide = registry.get_ide(rp.product_id)
+        print(f"\n  {colors.BOLD}#{rp.rank} — {rp.display_name} ({rp.vendor}){colors.RESET}")
+        print(f"     Recommendation Score: {colors.GREEN}{rp.score:.4f}{colors.RESET} (Heuristic recommendation score)")
+        print(f"     Pricing:              {rp.pricing_summary}")
+        if ide:
+            print(f"     Editor Integration:   {', '.join(ide.editor_integration)}")
+            print(f"     Supported Models:     {', '.join(ide.supported_models[:3])}")
+            print(f"     Key Capabilities:     {', '.join(ide.key_capabilities[:3])}")
+            print(f"     Privacy Controls:     {ide.privacy_statement}")
+            print(f"     Source URL:           {ide.source_url} (Audited: {ide.last_audit_date})")
+        print(f"     Reasoning:            {rp.reasoning}")
+
+    print("\n" + "-" * 80)
+    print(f"{colors.BOLD}CATEGORY PROVENANCE & ISOLATION NOTE:{colors.RESET}")
+    print("  IDE assistants are scored on agent workflows, indexing, terminal automation, and privacy.")
+    print("  They use monthly subscription tiers, NOT per-token foundation model pricing.")
+    print("=" * 80)
+
+    try:
+        input(f"\n{colors.CYAN}Press [Enter] to return to main menu...{colors.RESET}")
+    except (KeyboardInterrupt, EOFError):
+        pass
+
+
+# ===========================================================================
+# Option 4: AI App Builder Comparison
+# ===========================================================================
+
+def cli_compare_app_builders(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
+    """Compares verified AI app builders using full-stack capabilities and deployment."""
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}4. AI APP BUILDER COMPARISON{colors.RESET}")
+    print("=" * 80)
+    print(f"{colors.DIM}Evaluates full-stack backends, database/auth support, UI quality, and code export.{colors.RESET}")
+
+    if preloaded_prompt:
+        prompt = preloaded_prompt.strip()
+    else:
+        try:
+            print("\nEnter application requirements (or press [Enter] for full-stack web prototype):")
+            user_input = input(f"{colors.CYAN}>{colors.RESET} ").strip()
+            prompt = user_input or "Full-stack web application with user authentication, database persistence, and cloud hosting"
+        except (KeyboardInterrupt, EOFError):
+            return
+
+    # Ranking method selection
+    print("\nRanking Algorithm: [1] Weighted Sum Model (WSM) [default]  [2] TOPSIS")
+    try:
+        method_input = input(f"{colors.CYAN}Select method (1-2) [default=1]:{colors.RESET} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+    method = RankingMethod.TOPSIS if method_input == "2" else RankingMethod.WEIGHTED_SUM
+
+    print(f"\n{colors.CYAN}Evaluating app builders locally using {method.value.upper()}...{colors.RESET}")
+    report = comparison_engine.compare_prompt(
+        prompt=prompt,
+        category=ProductCategory.APP_BUILDER,
+        method=method
+    )
+
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}                AI APP BUILDER RANKINGS ({method.value.upper()}){colors.RESET}")
+    print("=" * 80)
+    print(f" {'Rank':<5} {'Product ID':<16} {'Display Name':<16} {'Vendor':<14} {'Score':<8} {'Primary Stacks'}")
+    print("-" * 80)
+    for rp in report.ranked_products or []:
+        builder = registry.get_app_builder(rp.product_id)
+        stacks_str = ", ".join(builder.primary_stacks[:3]) if builder else "Web"
+        print(f" #{rp.rank:<4} {rp.product_id:<16} {rp.display_name:<16} {rp.vendor:<14} {rp.score:<8.4f} {stacks_str}")
+    print("-" * 80)
+
+    # Detailed product cards
+    for rp in report.ranked_products or []:
+        builder = registry.get_app_builder(rp.product_id)
+        print(f"\n  {colors.BOLD}#{rp.rank} — {rp.display_name} ({rp.vendor}){colors.RESET}")
+        print(f"     Recommendation Score: {colors.GREEN}{rp.score:.4f}{colors.RESET} (Heuristic recommendation score)")
+        print(f"     Pricing Model:        {rp.pricing_summary}")
+        if builder:
+            print(f"     Primary Stacks:       {', '.join(builder.primary_stacks)}")
+            print(f"     Supported Backends:   {', '.join(builder.supported_backends)}")
+            print(f"     Database & Auth:      {', '.join(builder.database_auth_support)}")
+            print(f"     Deployment:           {', '.join(builder.deployment_options)}")
+            print(f"     GitHub Integration:   {builder.github_integration}")
+            print(f"     Source Code Export:   {builder.source_code_export}")
+            print(f"     Limitations:          {'; '.join(builder.documented_limitations)}")
+            print(f"     Source URL:           {builder.source_url} (Audited: {builder.last_audit_date})")
+        print(f"     Reasoning:            {rp.reasoning}")
+
+    print("\n" + "-" * 80)
+    print(f"{colors.BOLD}CATEGORY PROVENANCE & ISOLATION NOTE:{colors.RESET}")
+    print("  App builders are scored on full-stack backends, database/auth, and exportability.")
+    print("  They use freemium credit/tier plans, NOT per-token foundation model pricing.")
+    print("=" * 80)
+
+    try:
+        input(f"\n{colors.CYAN}Press [Enter] to return to main menu...{colors.RESET}")
+    except (KeyboardInterrupt, EOFError):
+        pass
+
+
+# ===========================================================================
+# Option 5: Inspect Model/Product Catalogue
+# ===========================================================================
+
+def cli_inspect_catalogue(colors: Colors) -> None:
+    """Inspects verified metadata, lifecycle status, pricing, and provenance across categories."""
+    while True:
+        print("\n" + "=" * 80)
+        print(f"{colors.BOLD}{colors.CYAN}5. INSPECT MODEL & PRODUCT CATALOGUE{colors.RESET}")
+        print("=" * 80)
+        print("Select category to inspect:")
+        print("  [1] Foundation Models (17 active GA, 7 unverified/preview/legacy)")
+        print("  [2] IDE Coding Assistants (4 verified products)")
+        print("  [3] AI App Builders (4 verified platforms)")
+        print("  [0] Back to Main Menu")
+
+        try:
+            choice = input(f"{colors.CYAN}Select option (0-3):{colors.RESET} ").strip()
+        except (KeyboardInterrupt, EOFError):
+            return
+
+        if choice in {"0", "back", "b"}:
+            return
+
+        # -------------------------------------------------------------------
+        # Category 1: Foundation Models
+        # -------------------------------------------------------------------
+        if choice == "1":
+            all_models = list(registry._models.values())
+            active_models = [m for m in all_models if m.lifecycle_status == LifecycleStatus.ACTIVE]
+            excluded_models = [m for m in all_models if m.lifecycle_status != LifecycleStatus.ACTIVE]
+
+            while True:
+                print("\n" + "-" * 80)
+                print(f"{colors.BOLD}ACTIVE FOUNDATION MODELS ({len(active_models)} models eligible for default rankings):{colors.RESET}")
+                print("-" * 80)
+                print(f" {'#':<3} {'Model ID':<22} {'Provider':<10} {'Context':<9} {'Pricing ($/1M in/out)':<24} {'Status'}")
+                print("-" * 80)
+                for idx, m in enumerate(active_models, 1):
+                    ctx_str = f"{m.context_window_tokens // 1000}K" if m.context_window_tokens < 1_000_000 else f"{m.context_window_tokens // 1_000_000}M"
+                    p_str = f"${m.pricing.input_cost_per_m:.2f} / ${m.pricing.output_cost_per_m:.2f}"
+                    print(f" {idx:<3} {m.model_id:<22} {m.provider:<10} {ctx_str:<9} {p_str:<24} {m.lifecycle_status.value.upper()}")
+                print("-" * 80)
+                print(f"• Enter model # (1-{len(active_models)}) or exact Model ID to inspect full metadata")
+                print("• Type 'e' or 'excluded' to view unverified, preview, and legacy models")
+                print("• Type '0' or 'back' to return to category selection")
+
+                try:
+                    sub = input(f"{colors.CYAN}Select model to inspect:{colors.RESET} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    break
+
+                if sub in {"0", "back", "b"}:
+                    break
+
+                if sub.lower() in {"e", "excluded"}:
+                    print("\n" + "-" * 80)
+                    print(f"{colors.BOLD}EXCLUDED / UNVERIFIED / PREVIEW / RETIRED MODELS ({len(excluded_models)} models):{colors.RESET}")
+                    print("-" * 80)
+                    for em in excluded_models:
+                        print(f"  • {colors.BOLD}{em.model_id:<20}{colors.RESET} [{em.lifecycle_status.value.upper()}] Provider: {em.provider}")
+                        if em.unverified_fields:
+                            print(f"      Unverified critical fields: {', '.join(em.unverified_fields)}")
+                        if em.deprecation_date:
+                            print(f"      Deprecation date: {em.deprecation_date} (Replacement: {em.replacement_model_id or 'None'})")
+                    print("-" * 80)
+                    try:
+                        input(f"{colors.CYAN}Press [Enter] to continue...{colors.RESET}")
+                    except (KeyboardInterrupt, EOFError):
+                        pass
+                    continue
+
+                target_model: Optional[ModelMetadata] = None
+                if sub.isdigit():
+                    num = int(sub)
+                    if 1 <= num <= len(active_models):
+                        target_model = active_models[num - 1]
+                else:
+                    target_model = registry.get_foundation_model(sub)
+
+                if not target_model:
+                    print(f"{colors.RED}[!] Model '{sub}' not found in registry.{colors.RESET}")
+                    continue
+
+                # Display detailed model card
+                print("\n" + "=" * 80)
+                print(f"{colors.BOLD}{colors.CYAN}FOUNDATION MODEL INSPECTION: {target_model.model_id}{colors.RESET}")
+                print("=" * 80)
+                print(f"  Display Name:             {target_model.display_name}")
+                print(f"  Provider:                 {target_model.provider}")
+                print(f"  Model Family:             {target_model.family}")
+                print(f"  Category:                 {target_model.category.value}")
+                print(f"  Lifecycle Status:         {target_model.lifecycle_status.value.upper()}")
+                print(f"  Default Ranking Eligible: {'YES' if registry.is_model_eligible(target_model.model_id) else 'NO (Excluded by lifecycle/provenance policy)'}")
+                print(f"  Context Window:           {target_model.context_window_tokens:,} tokens")
+                print(f"  Max Output Tokens:        {target_model.max_output_tokens:,} tokens")
+                if target_model.pricing.input_cost_per_m is not None:
+                    print(f"  Pricing:                  ${target_model.pricing.input_cost_per_m:.2f} in / ${target_model.pricing.output_cost_per_m:.2f} out per 1M tokens ({target_model.pricing.currency})")
+                    print(f"  Pricing Effective Date:   {target_model.pricing.pricing_effective_date} (Audited: {target_model.pricing.pricing_verification_date})")
+                    print(f"  Pricing Status:           {'STALE' if target_model.pricing.is_stale else 'KNOWN & CURRENT'}")
+                else:
+                    print(f"  Pricing:                  UNKNOWN / UNVERIFIED (Penalized; never treated as free)")
+                print(f"  Local Tokenizer Adapter:  {target_model.tokenizer_name}")
+                adapter = get_tokenizer_adapter(target_model.model_id)
+                tok_info = adapter.count_tokens("Test")
+                print(f"  Token Count Method:       {tok_info.token_count_method} (Confidence: {tok_info.token_count_confidence:.2f})")
+                print(f"  Token Count Disclaimer:   {tok_info.token_count_disclaimer}")
+                print(f"  Capabilities:             {', '.join(target_model.capabilities)}")
+                print(f"  Key Strengths:            {'; '.join(target_model.strengths)}")
+                print(f"  Description:              {target_model.description}")
+                print(f"  Documentation URL:        {target_model.source_url}")
+                print(f"  Source Verification Date: {target_model.verification_date}")
+                print(f"  Last Audit Date:          {target_model.last_audit_date}")
+                unv = getattr(target_model, "unverified_fields", [])
+                print(f"  Unverified Fields:        {', '.join(unv) if unv else 'None (All critical fields officially verified)'}")
+                print("=" * 80)
+
+                try:
+                    input(f"\n{colors.CYAN}Press [Enter] to return to model list...{colors.RESET}")
+                except (KeyboardInterrupt, EOFError):
+                    pass
+
+        # -------------------------------------------------------------------
+        # Category 2: IDE Coding Assistants
+        # -------------------------------------------------------------------
+        elif choice == "2":
+            ides = registry.list_ides()
+            print("\n" + "-" * 80)
+            print(f"{colors.BOLD}VERIFIED IDE CODING ASSISTANTS ({len(ides)} products):{colors.RESET}")
+            print("-" * 80)
+            for idx, ide in enumerate(ides, 1):
+                print(f" [{idx}] {ide.product_id:<20} {ide.display_name:<20} {ide.vendor:<18} {ide.pricing_tier_summary}")
+            print("-" * 80)
+
+            try:
+                sub = input(f"{colors.CYAN}Enter product # (1-{len(ides)}) or ID to inspect [Enter to return]:{colors.RESET} ").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+
+            if not sub:
+                continue
+
+            target_ide: Optional[IDEProductMetadata] = None
+            if sub.isdigit():
+                num = int(sub)
+                if 1 <= num <= len(ides):
+                    target_ide = ides[num - 1]
+            else:
+                target_ide = registry.get_ide(sub)
+
+            if not target_ide:
+                print(f"{colors.RED}[!] IDE product '{sub}' not found.{colors.RESET}")
+                continue
+
+            print("\n" + "=" * 80)
+            print(f"{colors.BOLD}{colors.CYAN}IDE PRODUCT INSPECTION: {target_ide.product_id}{colors.RESET}")
+            print("=" * 80)
+            print(f"  Display Name:           {target_ide.display_name}")
+            print(f"  Vendor:                 {target_ide.vendor}")
+            print(f"  Availability:           {target_ide.availability.value.upper()}")
+            print(f"  Supported OS:           {', '.join(target_ide.supported_os)}")
+            print(f"  Editor Integration:     {', '.join(target_ide.editor_integration)}")
+            print(f"  Supported Models:       {', '.join(target_ide.supported_models)}")
+            print(f"  Key Capabilities:       {'; '.join(target_ide.key_capabilities)}")
+            print(f"  Context Features:       {'; '.join(target_ide.context_features)}")
+            print(f"  Execution Capabilities: {'; '.join(target_ide.execution_capabilities)}")
+            print(f"  Pricing Tier Summary:   {target_ide.pricing_tier_summary}")
+            print(f"  Free Tier:              {target_ide.free_tier}")
+            print(f"  Paid Tiers:             {', '.join(target_ide.paid_tiers)}")
+            print(f"  Privacy Statement:      {target_ide.privacy_statement}")
+            print(f"  Documentation URL:      {target_ide.source_url}")
+            print(f"  Verification Date:      {target_ide.verification_date} (Audited: {target_ide.last_audit_date})")
+            print("=" * 80)
+
+            try:
+                input(f"\n{colors.CYAN}Press [Enter] to return...{colors.RESET}")
+            except (KeyboardInterrupt, EOFError):
+                pass
+
+        # -------------------------------------------------------------------
+        # Category 3: AI App Builders
+        # -------------------------------------------------------------------
+        elif choice == "3":
+            builders = registry.list_app_builders()
+            print("\n" + "-" * 80)
+            print(f"{colors.BOLD}VERIFIED AI APP BUILDERS ({len(builders)} platforms):{colors.RESET}")
+            print("-" * 80)
+            for idx, b in enumerate(builders, 1):
+                print(f" [{idx}] {b.product_id:<16} {b.display_name:<18} {b.vendor:<16} {b.pricing_tier_summary}")
+            print("-" * 80)
+
+            try:
+                sub = input(f"{colors.CYAN}Enter platform # (1-{len(builders)}) or ID to inspect [Enter to return]:{colors.RESET} ").strip()
+            except (KeyboardInterrupt, EOFError):
+                continue
+
+            if not sub:
+                continue
+
+            target_builder: Optional[AppBuilderMetadata] = None
+            if sub.isdigit():
+                num = int(sub)
+                if 1 <= num <= len(builders):
+                    target_builder = builders[num - 1]
+            else:
+                target_builder = registry.get_app_builder(sub)
+
+            if not target_builder:
+                print(f"{colors.RED}[!] App builder '{sub}' not found.{colors.RESET}")
+                continue
+
+            print("\n" + "=" * 80)
+            print(f"{colors.BOLD}{colors.CYAN}APP BUILDER INSPECTION: {target_builder.product_id}{colors.RESET}")
+            print("=" * 80)
+            print(f"  Display Name:           {target_builder.display_name}")
+            print(f"  Vendor:                 {target_builder.vendor}")
+            print(f"  Availability:           {target_builder.availability.value.upper()}")
+            print(f"  Primary Stacks:         {', '.join(target_builder.primary_stacks)}")
+            print(f"  Supported Backends:     {', '.join(target_builder.supported_backends)}")
+            print(f"  Database & Auth:        {', '.join(target_builder.database_auth_support)}")
+            print(f"  Deployment Options:     {', '.join(target_builder.deployment_options)}")
+            print(f"  GitHub Integration:     {target_builder.github_integration}")
+            print(f"  Source Code Export:     {target_builder.source_code_export}")
+            print(f"  Key Capabilities:       {'; '.join(target_builder.key_capabilities)}")
+            print(f"  Documented Limitations: {'; '.join(target_builder.documented_limitations)}")
+            print(f"  Pricing Tier Summary:   {target_builder.pricing_tier_summary}")
+            print(f"  Documentation URL:      {target_builder.source_url}")
+            print(f"  Verification Date:      {target_builder.verification_date} (Audited: {target_builder.last_audit_date})")
+            print("=" * 80)
+
+            try:
+                input(f"\n{colors.CYAN}Press [Enter] to return...{colors.RESET}")
+            except (KeyboardInterrupt, EOFError):
+                pass
+
+
+# ===========================================================================
+# Option 6: Text File Analysis
+# ===========================================================================
+
+def cli_file_analysis(colors: Colors) -> None:
+    """Safely loads a local text file and offers security or comparison analysis."""
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}6. ANALYSE PROMPT FROM FILE{colors.RESET}")
+    print("=" * 80)
+
+    try:
+        path_input = input(f"{colors.CYAN}Enter local path to text file (or 'c' to cancel):{colors.RESET} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    if path_input.lower() in {"c", "cancel", ""}:
+        return
+
+    file_path = Path(path_input).expanduser().resolve()
+
+    # 1. Path existence and regular file check
+    if not file_path.exists():
+        print(f"{colors.RED}[!] Error: File does not exist: {file_path}{colors.RESET}")
+        return
+    if not file_path.is_file():
+        print(f"{colors.RED}[!] Error: Path is not a regular file: {file_path}{colors.RESET}")
+        return
+
+    # 2. Readability check
+    if not os.access(file_path, os.R_OK):
+        print(f"{colors.RED}[!] Error: File is not readable (check permissions): {file_path}{colors.RESET}")
+        return
+
+    # 3. File size check (2 MB limit)
+    MAX_FILE_BYTES = 2 * 1024 * 1024
+    file_size = file_path.stat().st_size
+    if file_size > MAX_FILE_BYTES:
+        print(f"{colors.RED}[!] Error: File size ({file_size} bytes) exceeds maximum allowable limit (2 MB).{colors.RESET}")
+        return
+
+    # 4. UTF-8 Encoding check
+    try:
+        content = file_path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        print(f"{colors.RED}[!] Error: File could not be decoded as UTF-8 text (binary or unsupported encoding).{colors.RESET}")
+        return
+    except Exception as e:
+        print(f"{colors.RED}[!] Error reading file: {e}{colors.RESET}")
+        return
+
+    # 5. Empty file check
+    if not content.strip():
+        print(f"{colors.RED}[!] Error: File is empty or contains only whitespace: {file_path}{colors.RESET}")
+        return
+
+    # 6. Sensitive data pre-scan warning
+    secret_findings_count = 0
+    for pat in PATTERNS:
+        matches = list(pat["regex"].finditer(content))
+        secret_findings_count += len(matches)
+
+    if secret_findings_count > 0:
+        print(f"\n{colors.YELLOW}[!] CAUTION: File appears to contain detected credentials/secrets ({secret_findings_count} match(es)).{colors.RESET}")
+        print("    PromptShield AI will mask secrets in reports, but confirm you want to proceed.")
+        try:
+            confirm = input(f"{colors.CYAN}Proceed with analysis of this file? (y/N):{colors.RESET} ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if confirm not in {"y", "yes"}:
+            print(f"{colors.YELLOW}[i] Operation cancelled by user.{colors.RESET}")
+            return
+
+    # 7. Action Selection for Loaded Content
+    print(f"\n{colors.GREEN}✓ File loaded successfully:{colors.RESET} {file_path.name}")
+    print(f"  Length: {len(content)} chars | {len(content.split())} words | {len(content.splitlines())} lines")
+    print("\nSelect action for loaded file content:")
+    print("  [1] Analyse prompt for security vulnerabilities & attack surfaces")
+    print("  [2] Compare foundation models for this task")
+    print("  [3] Compare IDE coding assistants for this task")
+    print("  [4] Compare AI app builders for this task")
+    print("  [0] Cancel and return to main menu")
+
+    try:
+        action = input(f"{colors.CYAN}Select action (0-4):{colors.RESET} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    if action == "1":
+        cli_prompt_security_analysis(colors, preloaded_prompt=content)
+    elif action == "2":
+        cli_compare_foundation_models(colors, preloaded_prompt=content)
+    elif action == "3":
+        cli_compare_ide_assistants(colors, preloaded_prompt=content)
+    elif action == "4":
+        cli_compare_app_builders(colors, preloaded_prompt=content)
+    else:
+        print(f"{colors.YELLOW}[i] Operation cancelled.{colors.RESET}")
+
+
+# ===========================================================================
+# Option 7: View Help and Limitations
+# ===========================================================================
+
+def cli_view_help_and_limitations(colors: Colors) -> None:
+    """Displays platform guide, technical methodologies, and operational constraints."""
+    print("\n" + "=" * 80)
+    print(f"{colors.BOLD}{colors.CYAN}7. PROMPTSHIELD AI — HELP & ARCHITECTURAL LIMITATIONS{colors.RESET}")
+    print("=" * 80)
+    print(f"""
+{colors.BOLD}PLATFORM ARCHITECTURE & WORKING RULES:{colors.RESET}
+  1. 100% OFFLINE EXECUTION:
+     PromptShield AI NEVER calls OpenAI, Google, Anthropic, xAI, or any external
+     LLM generation APIs. No API keys are required or stored. Zero telemetry.
+
+  2. SECURITY CLASSIFIERS & DETECTORS:
+     • Prompt Security Model: Calibrated binary classifier trained on the MPDD dataset
+       to detect adversarial malice, prompt injections, and jailbreaks.
+     • Application Risk Model: Multi-label classifier evaluating 15 architectural
+       attack surfaces (SQLi, Auth weakness, SSRF, IDOR, etc.) implied by features.
+     • Security Controls Extractor: Recognizes declared security defenses (Argon2id,
+       CSP, RBAC, etc.) and explicit negations (e.g. 'no database').
+     • Sensitive Data Detector: Deterministic regex heuristics that detect API keys,
+       passwords, and tokens, automatically masking them in displays.
+
+  3. MULTI-MODEL COMPARISON (FOUNDATION MODELS):
+     • Multi-criteria ranking via Weighted Sum Model (WSM) and TOPSIS.
+     • Token counting: Exact via official local 'tiktoken' for OpenAI models;
+       calibrated offline SentencePiece/BPE estimates for Gemini, Claude, Grok, DeepSeek.
+     • Pricing & Missing Data Policy: Missing or unverified pricing receives maximum
+       cost penalties and is NEVER assumed free or lowest cost.
+     • Recommendation Score Disclaimer: Scores represent relative multi-criteria trade-offs
+       [0.0, 1.0], NOT measured answer benchmark quality, latency, or model intelligence.
+
+  4. PRODUCT CATEGORY ISOLATION:
+     • Foundation Models, IDE Coding Assistants, and AI App Builders are evaluated
+       in separate categories with domain-appropriate criteria.
+     • IDEs and App Builders use subscription/credit pricing, NOT per-token rates.
+
+  5. INTERACTIVE TERMINAL SHORTCUTS:
+     • In multiline text entry, type 'END' on a line by itself to finish.
+     • In any menu or prompt, type 'cancel' or 'c' to safely return.
+     • Press Ctrl+C or Ctrl+D (EOF) at any time to abort without stack traces.
+""")
+    print("=" * 80)
+
+    try:
+        input(f"{colors.CYAN}Press [Enter] to return to main menu...{colors.RESET}")
+    except (KeyboardInterrupt, EOFError):
+        pass
+
+
+# ===========================================================================
+# Main Interactive Menu Loop
+# ===========================================================================
+
+def run_interactive_cli(colors: Colors) -> None:
+    """
+    Runs the main interactive workspace loop for PromptShield AI.
+    The menu remains available after each completed action until option 0 is chosen.
+    """
+    print(get_banner(colors))
+
+    while True:
+        print("\n" + "=" * 80)
+        print(f"{colors.BOLD}PROMPTSHIELD AI{colors.RESET}")
+        print("Local Prompt Security & Model Recommendation Workspace")
+        print("=" * 80)
+        print("  1. Analyse a prompt for security vulnerabilities")
+        print("  2. Compare foundation models for a task")
+        print("  3. Compare IDE coding assistants")
+        print("  4. Compare AI app builders")
+        print("  5. Inspect model/product catalogue")
+        print("  6. Analyse a prompt from a file")
+        print("  7. View help and limitations")
+        print("  0. Exit")
+        print("=" * 80)
+
+        try:
+            choice = input(f"{colors.CYAN}Select an option (0-7):{colors.RESET} ").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            print(f"\n\n{colors.CYAN}Exiting PromptShield AI. Goodbye!{colors.RESET}\n")
+            sys.exit(0)
+
+        if choice in {"1", "analyse", "security"}:
+            cli_prompt_security_analysis(colors)
+        elif choice in {"2", "compare", "models"}:
+            cli_compare_foundation_models(colors)
+        elif choice in {"3", "ide", "ides"}:
+            cli_compare_ide_assistants(colors)
+        elif choice in {"4", "app", "builder", "builders"}:
+            cli_compare_app_builders(colors)
+        elif choice in {"5", "inspect", "catalogue"}:
+            cli_inspect_catalogue(colors)
+        elif choice in {"6", "file"}:
+            cli_file_analysis(colors)
+        elif choice in {"7", "help"}:
+            cli_view_help_and_limitations(colors)
+        elif choice in {"0", "exit", "quit", "q"}:
             print(f"\n{colors.CYAN}Thank you for using PromptShield AI. Goodbye!{colors.RESET}\n")
             sys.exit(0)
-        elif action == "another":
-            print("\n" + "=" * 80)
-            continue
+        else:
+            print(f"{colors.RED}[!] Invalid choice '{choice}'. Please select a number between 0 and 7.{colors.RESET}")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="PromptShield AI — Unified prompt security and application risk terminal interface."
+        description="PromptShield AI — Local Prompt Security & Model Recommendation Workspace."
     )
     parser.add_argument(
         "--prompt", "-p",
@@ -705,7 +1499,7 @@ def main():
     args = parser.parse_args()
     colors = Colors(enabled=(not args.no_color and is_color_supported()))
 
-    # Direct file input
+    # Direct file input (non-interactive mode)
     if args.file:
         file_path = Path(args.file)
         if not file_path.exists():
@@ -722,7 +1516,7 @@ def main():
         print(format_security_report(prompt, result, colors=colors))
         sys.exit(0)
 
-    # Direct string input
+    # Direct string input (non-interactive mode)
     if args.prompt is not None:
         prompt = args.prompt.strip()
         if not prompt:
@@ -735,7 +1529,7 @@ def main():
         print(format_security_report(prompt, result, colors=colors))
         sys.exit(0)
 
-    # Interactive mode (default when started with python cli.py)
+    # Interactive workspace mode
     run_interactive_cli(colors)
 
 

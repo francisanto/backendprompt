@@ -75,37 +75,75 @@ The project currently has a baseline **Application Risk Prediction Model** and i
 
 ---
 
-# 🚀 Terminal CLI Usage (`cli.py`)
+# 🚀 Terminal CLI Usage
 
-PromptShield AI provides an interactive, unified Terminal CLI suitable for local development and live demonstrations (e.g., college project expos).
+PromptShield AI provides an interactive, unified Terminal Workspace suitable for local development, security audits, and live demonstrations (e.g., college project expos).
 
-### Starting the Interactive CLI
+### Launching the Workspace
+
+You can launch the CLI using any of the following commands:
 
 ```bash
-python cli.py
+# 1. Recommended launcher script (checks virtualenv and dependencies):
+./run_cli.sh
+
+# 2. As a Python module:
+.venv/bin/python -m promptshield
+
+# 3. Direct script execution:
+.venv/bin/python cli.py
 ```
 
-### Interactive Workflow
+### Main Menu Options
 
-1. **PromptShield AI Banner**: Launches with the system header and diagnostic checks.
-2. **Multiline Prompt Entry**:
-   - Type or paste your prompt across multiple lines.
-   - Type **`END`** on a new line by itself to submit and analyze.
-   - Type **`exit`** or **`quit`** on the first line (or press `Ctrl+C`) to exit cleanly.
-3. **Automated Multi-Model Analysis**:
-   - **Prompt Security Model**: Evaluates adversarial malice, prompt injection, and jailbreak attempts (MPDD-trained binary classifier).
-   - **Application Risk Model**: Evaluates 15 architectural attack surfaces implied by requested software features.
-   - **Sensitive Data Detector**: Scans for leaked credentials, API keys, private keys, and database connection strings.
-4. **Unified Security Report**:
-   - Displays real confidence scores, classifications, and identified risk labels.
-   - Automatically redacts sensitive credentials from all terminal output.
-   - Clearly distinguishes *potential application attack surfaces* from *confirmed vulnerabilities*.
-   - Never treats a missing or failed model as benign.
-   - Delivers actionable, concrete security remediation recommendations.
-5. **Next-Action Menu**:
-   - `[1] Improve this prompt`: Displays the planned feature notice for automated prompt rewriting/optimization.
-   - `[2] Analyze another prompt`: Prompts for the next prompt.
-   - `[3] Exit PromptShield AI`: Exits cleanly.
+When launched, the workspace presents an interactive main menu that persists across actions:
+
+```text
+================================================================================
+PROMPTSHIELD AI
+Local Prompt Security & Model Recommendation Workspace
+================================================================================
+  1. Analyse a prompt for security vulnerabilities
+  2. Compare foundation models for a task
+  3. Compare IDE coding assistants
+  4. Compare AI app builders
+  5. Inspect model/product catalogue
+  6. Analyse a prompt from a file
+  7. View help and limitations
+  0. Exit
+================================================================================
+```
+
+1. **Option 1 — Prompt Security Analysis**:
+   - Evaluates adversarial malice, prompt injections, and jailbreaks (MPDD classifier).
+   - Predicts 15 architectural attack surfaces (SQLi, Auth weakness, SSRF, IDOR, etc.).
+   - Extracts explicitly stated security controls (Argon2id, CSP, RBAC, etc.) and negations.
+   - Detects and automatically redacts exposed credentials and API keys.
+   - Delivers actionable security remediation recommendations.
+2. **Option 2 — Offline Foundation Model Comparison**:
+   - 100% offline multi-model comparison using Weighted Sum Model (WSM) or TOPSIS.
+   - Infers task categories locally (`task_classifier.py`).
+   - Token counting: Exact via `tiktoken` for OpenAI, calibrated offline estimates for Gemini/Claude/Grok/DeepSeek.
+   - Explains excluded models (preview, unverified, legacy) and penalizes missing pricing.
+3. **Option 3 — IDE Coding Assistant Comparison**:
+   - Compares verified IDE assistants (Cursor, Windsurf, GitHub Copilot, Google Antigravity).
+   - Scored on multi-file agents, repo indexing, terminal execution, and privacy.
+   - Uses subscription plans, NOT per-token foundation pricing.
+4. **Option 4 — AI App Builder Comparison**:
+   - Compares verified platforms (Vercel v0, Bolt.new, Lovable, Replit).
+   - Scored on full-stack backend, database/auth support, UI quality, and code export.
+   - Uses credit/subscription tiers, NOT per-token foundation pricing.
+5. **Option 5 — Inspect Model/Product Catalogue**:
+   - Displays exact verified IDs, context windows, pricing per 1M tokens, tokenizer types, and audit dates.
+   - Lists unverified future releases (`gemini-2.5-pro`, `gemini-2.5-flash`) and previews (`grok-3`, `grok-3-mini`).
+6. **Option 6 — Analyse a Prompt from a File**:
+   - Safely ingests UTF-8 text files up to 2 MB (no execution, no file mutation).
+   - Pre-scans for sensitive secrets and prompts for confirmation if keys are found.
+   - Dispatches to security analysis or multi-model comparison.
+7. **Option 7 — View Help and Limitations**:
+   - Complete technical guide to classifiers, tokenizers, ranking formulas, and offline operation.
+8. **Option 0 — Exit**:
+   - Clean shutdown without tracebacks.
 
 ### Non-Interactive / Scripting Mode
 
@@ -113,13 +151,13 @@ You can also run single-shot evaluations using command-line arguments:
 
 ```bash
 # Analyze a direct prompt string
-python cli.py --prompt "Build a web app with user login, password reset, and SQL database."
+.venv/bin/python cli.py --prompt "Build a web app with user login, password reset, and SQL database."
 
 # Analyze a prompt from a file
-python cli.py --file path/to/prompt.txt
+.venv/bin/python cli.py --file path/to/prompt.txt
 
 # Disable ANSI colors (useful for pipelines or plain log files)
-python cli.py --prompt "Build an API" --no-color
+.venv/bin/python cli.py --prompt "Build an API" --no-color
 ```
 
 ---
