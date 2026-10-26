@@ -121,6 +121,8 @@ class ModelComparisonItemSchema(BaseModel):
     lifecycle_status: str
     source_url: Optional[str] = ""
     verification_date: Optional[str] = ""
+    last_audit_date: Optional[str] = "2026-10-25"
+    unverified_fields: List[str] = []
 
 
 class RankedModelSchema(BaseModel):
@@ -137,6 +139,8 @@ class RankedModelSchema(BaseModel):
     benchmark_status: str
     reasoning: str
     lifecycle_status: str
+    score_type: Optional[str] = "heuristic_recommendation_score"
+    score_disclaimer: Optional[str] = None
 
 
 class RankedProductSchema(BaseModel):
@@ -153,6 +157,8 @@ class RankedProductSchema(BaseModel):
     supported_models_or_stacks: List[str]
     source_url: str
     verification_date: str
+    score_type: Optional[str] = "heuristic_recommendation_score"
+    score_disclaimer: Optional[str] = None
 
 
 class ProductComparisonItemSchema(BaseModel):
@@ -172,6 +178,8 @@ class ProductComparisonItemSchema(BaseModel):
     source_url: str
     verification_date: str
     provenance: Dict[str, str]
+    last_audit_date: Optional[str] = "2026-10-25"
+    unverified_fields: List[str] = []
 
 
 class PromptFeaturesSchema(BaseModel):
@@ -236,3 +244,7 @@ class ModelMetadataSchema(BaseModel):
     replacement_model_id: Optional[str] = None
     pricing_tier_summary: Optional[str] = None
     supported_options: Optional[List[str]] = None
+    last_audit_date: Optional[str] = "2026-10-25"
+    unverified_fields: List[str] = []
+    is_stale_pricing: Optional[bool] = False
+    pricing_verification_date: Optional[str] = None

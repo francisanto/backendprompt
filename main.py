@@ -95,7 +95,11 @@ def list_models(
                 source_url=m.source_url,
                 verification_date=m.verification_date,
                 deprecation_date=m.deprecation_date,
-                replacement_model_id=m.replacement_model_id
+                replacement_model_id=m.replacement_model_id,
+                last_audit_date=getattr(m, "last_audit_date", "2026-10-25"),
+                unverified_fields=getattr(m, "unverified_fields", []),
+                is_stale_pricing=m.pricing.is_stale,
+                pricing_verification_date=m.pricing.pricing_verification_date
             )
             for m in models
         ]
@@ -121,7 +125,9 @@ def list_models(
                 source_url=i.source_url,
                 verification_date=i.verification_date,
                 pricing_tier_summary=i.pricing_tier_summary,
-                supported_options=i.supported_models
+                supported_options=i.supported_models,
+                last_audit_date=getattr(i, "last_audit_date", "2026-10-25"),
+                unverified_fields=getattr(i, "unverified_fields", [])
             )
             for i in ides
         ]
@@ -147,7 +153,9 @@ def list_models(
                 source_url=b.source_url,
                 verification_date=b.verification_date,
                 pricing_tier_summary=b.pricing_tier_summary,
-                supported_options=b.supported_backends
+                supported_options=b.supported_backends,
+                last_audit_date=getattr(b, "last_audit_date", "2026-10-25"),
+                unverified_fields=getattr(b, "unverified_fields", [])
             )
             for b in builders
         ]
@@ -163,7 +171,7 @@ def list_models(
 def get_model(model_id: str):
     """
     Returns metadata, lifecycle/availability status, and specifications for a registered item.
-    Supports querying across foundation models (e.g. 'gpt-4o', 'gemini-2.5-pro'),
+    Supports querying across foundation models (e.g. 'gpt-6-astra', 'gemini-4-argon'),
     IDEs (e.g. 'cursor', 'windsurf'), and app builders (e.g. 'v0-dev', 'lovable-dev').
     """
     item = registry.get_model(model_id)
@@ -194,7 +202,11 @@ def get_model(model_id: str):
             source_url=item.source_url,
             verification_date=item.verification_date,
             deprecation_date=item.deprecation_date,
-            replacement_model_id=item.replacement_model_id
+            replacement_model_id=item.replacement_model_id,
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            unverified_fields=getattr(item, "unverified_fields", []),
+            is_stale_pricing=item.pricing.is_stale,
+            pricing_verification_date=item.pricing.pricing_verification_date
         )
     elif isinstance(item, IDEProductMetadata):
         return ModelMetadataSchema(
@@ -210,7 +222,9 @@ def get_model(model_id: str):
             source_url=item.source_url,
             verification_date=item.verification_date,
             pricing_tier_summary=item.pricing_tier_summary,
-            supported_options=item.supported_models
+            supported_options=item.supported_models,
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            unverified_fields=getattr(item, "unverified_fields", [])
         )
     elif isinstance(item, AppBuilderMetadata):
         return ModelMetadataSchema(
@@ -226,7 +240,9 @@ def get_model(model_id: str):
             source_url=item.source_url,
             verification_date=item.verification_date,
             pricing_tier_summary=item.pricing_tier_summary,
-            supported_options=item.supported_backends
+            supported_options=item.supported_backends,
+            last_audit_date=getattr(item, "last_audit_date", "2026-10-25"),
+            unverified_fields=getattr(item, "unverified_fields", [])
         )
     else:
         raise HTTPException(status_code=500, detail="Unexpected metadata item type.")
@@ -303,7 +319,9 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "provenance": d.provenance,
                 "lifecycle_status": d.lifecycle_status,
                 "source_url": d.source_url,
-                "verification_date": d.verification_date
+                "verification_date": d.verification_date,
+                "last_audit_date": getattr(d, "last_audit_date", "2026-10-25"),
+                "unverified_fields": getattr(d, "unverified_fields", [])
             }
 
     ranked_models_list = []
@@ -322,7 +340,9 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "latency_status": rm.latency_status,
                 "benchmark_status": rm.benchmark_status,
                 "reasoning": rm.reasoning,
-                "lifecycle_status": rm.lifecycle_status
+                "lifecycle_status": rm.lifecycle_status,
+                "score_type": getattr(rm, "score_type", "heuristic_recommendation_score"),
+                "score_disclaimer": getattr(rm, "score_disclaimer", None)
             })
 
     # 2. Format product details if applicable
@@ -346,6 +366,8 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "description": pd.description,
                 "source_url": pd.source_url,
                 "verification_date": pd.verification_date,
+                "last_audit_date": getattr(pd, "last_audit_date", "2026-10-25"),
+                "unverified_fields": getattr(pd, "unverified_fields", []),
                 "provenance": pd.provenance
             }
 
@@ -365,7 +387,9 @@ def compare_models_endpoint(req: ModelComparisonRequest):
                 "reasoning": rp.reasoning,
                 "supported_models_or_stacks": rp.supported_models_or_stacks,
                 "source_url": rp.source_url,
-                "verification_date": rp.verification_date
+                "verification_date": rp.verification_date,
+                "score_type": getattr(rp, "score_type", "heuristic_recommendation_score"),
+                "score_disclaimer": getattr(rp, "score_disclaimer", None)
             }
             for rp in report.ranked_products
         ]

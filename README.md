@@ -257,29 +257,40 @@ Centralized in `analyzers/model_comparison/registry.py` with verified provider d
 
 - **Active Models (Default Recommendation Pool):**
   - `gpt-4o` (128k context, $2.50/$10.00 per M) — [OpenAI Models](https://platform.openai.com/docs/models#gpt-4o)
-  - `gpt-4o-mini` (128k context, $0.15/$0.60 per M) — [OpenAI Pricing](https://openai.com/api/pricing)
-  - `o1` (200k context, $15.00/$60.00 per M) — [OpenAI o1](https://platform.openai.com/docs/models#o1)
-  - `o3-mini` (200k context, $1.10/$4.40 per M) — [OpenAI o3-mini](https://platform.openai.com/docs/models#o3-mini)
-  - `gemini-2.0-flash` (1M context, $0.10/$0.40 per M) — [Google Gemini 2.0 Flash](https://ai.google.dev/gemini-api/docs/models/gemini#gemini-2.0-flash)
-  - `gemini-2.5-pro` (2M context, $1.25/$5.00 per M) — [Google Gemini 2.5 Pro](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)
-  - `gemini-2.5-flash` (1M context, $0.10/$0.40 per M) — [Google Gemini 2.5 Flash](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)
-  - `claude-3-7-sonnet` (200k context, $3.00/$15.00 per M) — [Anthropic Claude 3.7 Sonnet](https://docs.anthropic.com/en/docs/about-claude/models#claude-3-7-sonnet)
-  - `claude-3-5-haiku` (200k context, $0.80/$4.00 per M) — [Anthropic Pricing](https://www.anthropic.com/pricing)
-  - `grok-3` (131k context, $3.00/$15.00 per M) — [xAI Grok](https://docs.x.ai/)
-  - `grok-3-mini` (131k context, $0.30/$0.50 per M) — [xAI Grok](https://docs.x.ai/)
+#### Category A: Foundation Models (`foundation_model`)
+- **Active Generally Available Generation (Default recommendation pool, audited 2026-10-25):**
+  - `gpt-6-astra` (1.05M context, $10.00/$50.00 per M) — [OpenAI GPT-6 Astra](https://developers.openai.com/api/docs/models#gpt-6-astra)
+  - `gpt-6-sol` (1.05M context, $2.00/$10.00 per M) — [OpenAI GPT-6 Sol](https://developers.openai.com/api/docs/models#gpt-6-sol)
+  - `gpt-6-luna` (1.05M context, $0.10/$0.50 per M) — [OpenAI GPT-6 Luna](https://developers.openai.com/api/docs/models#gpt-6-luna)
+  - `gemini-4-argon` (1.0M context, $2.00/$10.00 per M) — [Google Gemini 4 Argon](https://ai.google.dev/gemini-api/docs/models#gemini-4-argon)
+  - `gemini-3-8-flash` (1.0M context, $0.75/$3.75 per M) — [Google Gemini 3.8 Flash](https://ai.google.dev/gemini-api/docs/models#gemini-3.8-flash)
+  - `claude-sonnet-5-5` (1.0M context, $3.00/$15.00 per M) — [Anthropic Claude Sonnet 5.5](https://docs.anthropic.com/en/docs/about-claude/models#claude-sonnet-5-5)
+  - `claude-haiku-5-5` (1.0M context, $0.10/$0.50 per M) — [Anthropic Claude Haiku 5.5](https://docs.anthropic.com/en/docs/about-claude/models#claude-haiku-5-5)
+  - `claude-opus-5-5` (1.0M context, $4.00/$20.00 per M) — [Anthropic Claude Opus 5.5](https://docs.anthropic.com/en/docs/about-claude/models#claude-opus-5-5)
+  - `grok-4-7` (500k context, $2.00/$6.00 per M) — [xAI Grok 4.7](https://docs.x.ai/docs/models#grok-4-7)
+  - `grok-4-3` (1.0M context, $1.25/$2.50 per M) — [xAI Grok 4.3](https://docs.x.ai/docs/models#grok-4-3)
 
-- **Deprecated / Retired Models (Excluded by default; accessible via `include_deprecated=True` or direct ID):**
-  - `gemini-1.5-pro` (Retired Sep 2025; replaced by Gemini 2.5 Pro) — [Google Deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
-  - `gemini-1.5-flash` (Retired Sep 2025; replaced by Gemini 2.5 Flash) — [Google Deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
-  - `claude-3-5-sonnet` (Deprecated Aug 2025; replaced by Claude 3.7 Sonnet) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
-  - `claude-3-opus` (Retired Jan 2026; replaced by Claude 3.7 Sonnet) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
-  - `gpt-4-turbo` (Deprecated; replaced by GPT-4o) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#gpt-4-turbo)
-  - `gpt-3.5-turbo` (Retired; replaced by GPT-4o-mini) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations)
-  - `grok-2` (Retired; replaced by Grok 3) — [xAI Deprecations](https://docs.x.ai/)
+- **Deprecated / Retired Historical Models (Strictly excluded by default; accessible via `include_deprecated=True`):**
+  - `gemini-2.0-flash` (Retired Jun 2026; replaced by Gemini 3.8 Flash) — [Google Deprecations](https://ai.google.dev/gemini-api/docs/deprecations)
+  - `claude-3-5-haiku` (Retired Feb 2026; replaced by Claude Haiku 5.5) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
+  - `gpt-4o` (Deprecated; shutdown Jan 14, 2027; replaced by GPT-6 Sol) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#gpt-4o)
+  - `gpt-4o-mini` (Deprecated; shutdown Jan 14, 2027; replaced by GPT-6 Luna) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#gpt-4o-mini)
+  - `o1` (Retired Oct 23, 2026; replaced by GPT-6 Astra) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#o1)
+  - `o3-mini` (Retired Oct 23, 2026; replaced by GPT-6 Luna) — [OpenAI Deprecations](https://platform.openai.com/docs/deprecations#o3-mini)
+  - `gemini-2.5-pro` (Deprecated/Limited access; replaced by Gemini 4 Argon) — [Google Gemini](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro)
+  - `gemini-2.5-flash` (Deprecated/Limited access; replaced by Gemini 3.8 Flash) — [Google Gemini](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash)
+  - `claude-3-7-sonnet` (Retired Feb 19, 2026; replaced by Claude Sonnet 5.5) — [Anthropic Deprecations](https://platform.claude.com/docs/en/docs/about-claude/model-deprecations)
+  - `grok-3` (Retired Sep 2026; replaced by Grok 4.7) — [xAI Grok](https://docs.x.ai/docs/deprecations)
+  - `grok-3-mini` (Retired Sep 2026; replaced by Grok 4.3) — [xAI Grok](https://docs.x.ai/docs/deprecations)
+  - `gemini-1.5-pro` & `gemini-1.5-flash` (Retired Sep 2025; replaced by Gemini 3.8 Flash)
+  - `claude-3-5-sonnet` (Retired Oct 2025; replaced by Claude Sonnet 5.5)
+  - `claude-3-opus` (Retired Jan 2026; replaced by Claude Opus 5.5)
+  - `gpt-4-turbo` & `gpt-3.5-turbo` (Retired; replaced by GPT-6 series)
+  - `grok-2` (Retired; replaced by Grok 4.7)
 
 #### Category B: IDEs & Coding Assistants (`ide_assistant`)
 Evaluated on developer environment workflows, multi-file agent autonomy, and repository understanding:
-- **`cursor`** (Anysphere) — VS Code fork featuring Composer, local vector indexing, and Claude 3.7/GPT-4o selection. ($0 / $20/mo / $40/mo).
+- **`cursor`** (Anysphere) — VS Code fork featuring Composer, local vector indexing, and Claude Sonnet 5.5 / GPT-6 Sol selection. ($0 / $20/mo / $40/mo).
 - **`windsurf`** (Codeium) — Continuous flow IDE with Cascade Fast Context routing, multi-file inline edits, and terminal execution. ($0 / $20/mo / $40/mo).
 - **`github-copilot`** (GitHub / Microsoft) — Deepest editor ecosystem (VS Code, JetBrains, Visual Studio, Xcode), Copilot Workspace, PR review. ($0 / $10/mo / $19/mo / $39/mo).
 - **`google-antigravity`** (Google) — Agent-first platform with autonomous multi-surface agents, asynchronous agent manager, verifiable artifacts, and browser subagents.
