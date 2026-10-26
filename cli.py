@@ -20,7 +20,7 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 # Ensure repository root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parent
@@ -42,6 +42,8 @@ from analyzers.model_comparison.registry import (
 from analyzers.model_comparison.ranker import RankingMethod, RankingPreset, PRESET_WEIGHTS
 from analyzers.model_comparison.task_classifier import task_classifier
 from analyzers.model_comparison.tokenizer_adapters import get_tokenizer_adapter
+from analyzers.prompt_optimizer import prompt_optimizer, OptimizationResult
+
 
 
 # ANSI Colors with automatic TTY / NO_COLOR detection
@@ -645,14 +647,595 @@ def handle_next_action_menu(colors: Colors) -> str:
 
 
 # ===========================================================================
-# Option 1: Prompt Security Analysis
+# File Saving Utility
+# ===========================================================================
+
+def save_prompt_to_file(colors: Colors, text: str) -> None:
+    """Saves text content to a user-specified file with overwrite confirmation."""
+    try:
+        path_str = input(f"\n{colors.CYAN}Enter destination file path to save prompt (or 'c' to cancel):{colors.RESET} ").strip()
+    except (KeyboardInterrupt, EOFError):
+        return
+
+    if path_str.lower() in {"c", "cancel", ""}:
+        print(f"{colors.YELLOW}[i] File save cancelled.{colors.RESET}")
+        return
+
+    dest_path = Path(path_str).expanduser().resolve()
+    if dest_path.exists():
+        print(f"{colors.YELLOW}[!] File '{dest_path.name}' already exists. Overwrite? (y/N):{colors.RESET}")
+        try:
+            confirm = input(f"{colors.YELLOW}Overwrite file? (y/N): {colors.RESET}").strip().lower()
+        except (KeyboardInterrupt, EOFError):
+            return
+        if confirm not in {"y", "yes"}:
+            print(f"{colors.YELLOW}[i] File save cancelled: existing file preserved.{colors.RESET}")
+            return
+
+    try:
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_path.write_text(text, encoding="utf-8")
+        print(f"{colors.GREEN}✓ Successfully saved optimized prompt to: {dest_path}{colors.RESET}")
+        print(f"  Size: {len(text)} characters, {len(text.encode('utf-8'))} bytes, {len(text.splitlines())} lines.")
+    except Exception as e:
+        print(f"{colors.RED}[!] Error writing file: {e}{colors.RESET}")
+
+
+# ===========================================================================
+# Option 1: Complete End-to-End Workflow (Analyse, Compare, and Optimize)
+# ===========================================================================
+
+def cli_complete_end_to_end_workflow(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
+    """
+    Executes the primary sequential PromptShield AI workflow:
+    1. Accept original prompt
+    2. Clarify objective if brief / unclear
+    3. Analyze security risks in original prompt
+    4. Compare eligible foundation models locally
+    5. Recommend suitable model for original prompt
+    6. Generate optimized prompt deterministically & locally
+    7. Re-analyse optimized prompt for security risks
+    8. Re-compare models for optimized prompt
+    9. Recommend model for optimized prompt
+    10. Present clear before-and-after summary (Sections A-H)
+    11. Offer next actions: save to file, re-optimize, compare models, new analysis, or exit.
+    """
+    active_prompt = preloaded_prompt.strip() if preloaded_prompt else None
+
+    while True:
+        print("\n" + "=" * 80)
+        print(f"{colors.BOLD}{colors.CYAN}1. ANALYSE, COMPARE AND OPTIMIZE A PROMPT (COMPLETE WORKFLOW){colors.RESET}")
+        print("=" * 80)
+        print("Sequential local workflow: Security Analysis → Model Recommendation →")
+        print("Deterministic Optimization → Security Re-analysis → Model Re-recommendation → Summary")
+        print("=" * 80)
+
+        # Stage 1: Accept prompt
+        if active_prompt:
+            prompt = active_prompt
+            print(f"{colors.GREEN}✓ Using preloaded prompt ({len(prompt)} chars, {len(prompt.split())} words){colors.RESET}")
+        else:
+            prompt = read_multiline_prompt(
+                colors,
+                prompt_label="Enter original prompt for complete end-to-end analysis & optimization:",
+                sentinel="END"
+            )
+            if not prompt or prompt.lower() in {"cancel", "c"}:
+                print(f"\n{colors.YELLOW}[i] Workflow cancelled. Returning to main menu.{colors.RESET}")
+                return
+
+        # Stage 2: Clarify objective if brief / unclear
+        user_clarification: Optional[str] = None
+        word_count = len(prompt.split())
+        if word_count < 6:
+            print(f"\n{colors.YELLOW}[!] The prompt appears very brief ({word_count} words). Clarifying the desired outcome helps produce a better optimization.{colors.RESET}")
+            print(f"{colors.CYAN}What specific result do you want to achieve? (or press [Enter] to proceed with defaults, 'c' to cancel):{colors.RESET}")
+            try:
+                clarif_in = input(f"{colors.CYAN}> {colors.RESET}").strip()
+            except (KeyboardInterrupt, EOFError):
+                return
+            if clarif_in.lower() in {"c", "cancel"}:
+                print(f"{colors.YELLOW}[i] Workflow cancelled. Returning to main menu.{colors.RESET}")
+                return
+            if clarif_in:
+                user_clarification = clarif_in
+
+        # Settings for model comparison
+        selected_ids: Optional[List[str]] = None
+        method = RankingMethod.WEIGHTED_SUM
+        preset = RankingPreset.BALANCED
+
+        # Workflow execution loop (allows re-optimization or model selection without re-entering prompt)
+        while True:
+            # ------------------------------------------------------------------
+            # Stage 3: Original Prompt Security Analysis
+            # ------------------------------------------------------------------
+            print(f"\n{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.BOLD}[STAGE 1/6] ORIGINAL PROMPT SECURITY ANALYSIS{colors.RESET}")
+            print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.CYAN}Evaluating adversarial malice, 15 application risk surfaces, and credentials...{colors.RESET}\n")
+
+            orig_analysis = analyze_prompt(prompt, analysis_mode="both")
+
+            # Educational intent check
+            is_educational = bool(re.search(r"\b(explain|how does|what is|describe the concept|time complexity|difference between|overview of)\b", prompt, re.IGNORECASE))
+            if is_educational:
+                print(f"  {colors.CYAN}ℹ Educational Intent Detected: Prompt appears to request conceptual explanation or technical comparison rather than instructing an unsafe exploitation.{colors.RESET}\n")
+
+            # 1. Prompt Injection
+            sec_prob = orig_analysis.get("prompt_security", {})
+            is_mal = sec_prob.get("is_malicious", False)
+            prob_val = sec_prob.get("malicious_probability", 0.0)
+            conf_val = max(prob_val, 1.0 - prob_val)
+            if is_mal:
+                print(f"  • Category:   {colors.BOLD}Prompt Injection & Instruction Override{colors.RESET}")
+                print(f"    Severity:   {colors.RED}{colors.BOLD}HIGH{colors.RESET}")
+                print(f"    Confidence: {prob_val:.1%} (Adversarial probability)")
+                print(f"    Evidence:   Potential system instruction override, jailbreak, or boundary escaping pattern.")
+                print(f"    Explanation: Prompt attempts to alter system directives or jailbreak the downstream LLM.")
+                print(f"    Mitigation: Wrap dynamic inputs in strict `<user_input>` delimiters and enforce instruction hierarchy.")
+                print()
+            else:
+                print(f"  • Category:   {colors.BOLD}Prompt Injection & Instruction Override{colors.RESET}")
+                print(f"    Severity:   {colors.GREEN}LOW / BENIGN{colors.RESET}")
+                print(f"    Confidence: {conf_val:.1%} (Non-adversarial probability: {1.0 - prob_val:.1%})")
+                print(f"    Explanation: Prompt does not exhibit adversarial jailbreak patterns.")
+                print(f"    Mitigation: Maintain standard input boundary tagging when accepting external inputs.")
+                print()
+
+            # 2. Sensitive Data Leakage
+            sens = orig_analysis.get("sensitive_data", {})
+            if sens.get("detected"):
+                findings = sens.get("findings", [])
+                for item in findings:
+                    print(f"  • Category:   {colors.BOLD}Sensitive Data Exposure ({item.get('type')}){colors.RESET}")
+                    print(f"    Severity:   {colors.RED}{colors.BOLD}CRITICAL{colors.RESET}")
+                    print(f"    Evidence:   {colors.YELLOW}{item.get('redacted')}{colors.RESET} (safely masked)")
+                    print(f"    Explanation: {item.get('description')} detected in raw prompt text.")
+                    print(f"    Mitigation: Remove secrets from prompt text; inject securely via environment variables (`os.environ`).")
+                    print()
+            else:
+                print(f"  • Category:   {colors.BOLD}Sensitive Data Exposure{colors.RESET}")
+                print(f"    Status:     {colors.GREEN}[ None detected ]{colors.RESET} (No hardcoded API keys, tokens, or passwords)")
+                print()
+
+            # 3. Application Architectural Risks
+            app_risks = orig_analysis.get("application_risks", {})
+            detected_risks = app_risks.get("detected_risks", [])
+            risk_probs = app_risks.get("risk_probabilities", {})
+            mitigated_surfaces = app_risks.get("mitigated_surfaces", {})
+            declared_controls = app_risks.get("declared_controls", [])
+
+            if detected_risks:
+                for r in detected_risks:
+                    meta = RISK_METADATA.get(r, {
+                        "title": r.replace("_", " ").title(),
+                        "description": "Implied architectural attack surface in requested features.",
+                        "recommendation": "Apply defensive controls."
+                    })
+                    title = meta.get("title", r)
+                    expl = meta.get("description", "")
+                    mit = meta.get("recommendation", "")
+                    prob = risk_probs.get(r, 0.5)
+                    sev = "HIGH" if prob >= 0.70 else "MEDIUM"
+                    sev_color = colors.RED if sev == "HIGH" else colors.YELLOW
+                    is_mitigated = r in mitigated_surfaces
+                    status_str = f"{colors.GREEN}[Declared Mitigations Present]{colors.RESET}" if is_mitigated else f"{sev_color}[UNMITIGATED]{colors.RESET}"
+                    print(f"  • Category:   {colors.BOLD}{title} ({r}){colors.RESET} {status_str}")
+                    print(f"    Severity:   {sev_color}{sev}{colors.RESET} (Detection confidence: {prob:.1%})")
+                    print(f"    Explanation: {expl}")
+                    print(f"    Mitigation: {mit}")
+                    if is_mitigated:
+                        print(f"    Declared:   Detected controls in prompt: {', '.join(mitigated_surfaces[r])}")
+                    print()
+            else:
+                print(f"  • Application Risks: {colors.GREEN}[ None detected ]{colors.RESET} (No high-risk architectural attack surfaces detected)\n")
+
+            print(f"  {colors.DIM}Static Analysis Note: Analysis evaluates prompt text heuristically. Static analysis cannot guarantee that code generated or executed downstream is secure.{colors.RESET}")
+
+            # ------------------------------------------------------------------
+            # Stage 4: Local Model Comparison (Original Prompt)
+            # ------------------------------------------------------------------
+            print(f"\n{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.BOLD}[STAGE 2/6] FOUNDATION MODEL COMPARISON (ORIGINAL PROMPT){colors.RESET}")
+            print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+
+            eligible_models = registry.list_models(include_deprecated=False)
+            print(f"Evaluating across {len(eligible_models)} active eligible foundation models.")
+            print(f"Default comparison: Automatic comparison using Weighted Sum Model (WSM, balanced preset).")
+
+            try:
+                choice_config = input(f"{colors.CYAN}Press [Enter] to run default comparison, or 's' to customize models/preset (or 'c' to cancel):{colors.RESET} ").strip().lower()
+            except (KeyboardInterrupt, EOFError):
+                return
+
+            if choice_config in {"c", "cancel"}:
+                print(f"\n{colors.YELLOW}[i] Workflow cancelled. Returning to main menu.{colors.RESET}")
+                return
+
+            if choice_config == "s":
+                print(f"\n{colors.BOLD}Eligible Active Foundation Models:{colors.RESET}")
+                for idx, m in enumerate(eligible_models, 1):
+                    print(f"  [{idx:2d}] {m.model_id:<24} ({m.display_name}, {m.provider})")
+                try:
+                    sel_in = input(f"\n{colors.CYAN}Enter comma-separated numbers or IDs (or [Enter] for all {len(eligible_models)}):{colors.RESET} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    return
+                if sel_in:
+                    parts = [p.strip() for p in sel_in.split(",") if p.strip()]
+                    resolved: List[str] = []
+                    for p in parts:
+                        if p.isdigit():
+                            num = int(p)
+                            if 1 <= num <= len(eligible_models):
+                                resolved.append(eligible_models[num - 1].model_id)
+                        elif registry.get_foundation_model(p):
+                            resolved.append(p)
+                    if resolved:
+                        selected_ids = list(dict.fromkeys(resolved))
+
+                print("\nRanking Method: [1] WSM (default)  [2] TOPSIS")
+                try:
+                    m_in = input(f"{colors.CYAN}Select method (1-2) [1]:{colors.RESET} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    return
+                if m_in == "2":
+                    method = RankingMethod.TOPSIS
+
+                print("\nPreset: [1] balanced  [2] cost_optimized  [3] quality_optimized  [4] long_context")
+                try:
+                    p_in = input(f"{colors.CYAN}Select preset (1-4) [1]:{colors.RESET} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    return
+                preset_map = {
+                    "1": RankingPreset.BALANCED,
+                    "2": RankingPreset.COST_OPTIMIZED,
+                    "3": RankingPreset.QUALITY_OPTIMIZED,
+                    "4": RankingPreset.LONG_CONTEXT
+                }
+                preset = preset_map.get(p_in, RankingPreset.BALANCED)
+
+            is_single_model = (selected_ids is not None and len(selected_ids) == 1)
+            if is_single_model:
+                print(f"\n{colors.YELLOW}[NOTE: Single model selected ({selected_ids[0]}). This evaluation is a suitability assessment against your prompt requirements, not a comparative multi-model ranking.]{colors.RESET}")
+
+            print(f"\n{colors.CYAN}Evaluating candidate models locally ({method.value.upper()}, {preset.value} preset)...{colors.RESET}")
+            orig_report = comparison_engine.compare_prompt(
+                prompt=prompt,
+                category=ProductCategory.FOUNDATION_MODEL,
+                method=method,
+                preset=preset,
+                model_ids=selected_ids
+            )
+
+            # Concise Table
+            print("\n" + "-" * 88)
+            print(f" {'Rank':<5} {'Model ID':<22} {'Suit':<6} {'Tokens (in/out)':<17} {'Est. Cost':<11} {'Context':<8} {'Tok. Conf':<10} {'Lifecycle'}")
+            print("-" * 88)
+            for rm in orig_report.ranked_models:
+                det = orig_report.model_details.get(rm.model_id)
+                cost_str = f"${rm.estimated_cost_usd:.5f}" if rm.estimated_cost_usd is not None else "N/A"
+                tok_in = det.token_count if det else rm.token_count
+                tok_out = det.estimated_output_tokens if det else 350
+                tok_str = f"{tok_in} / {tok_out}"
+                ctx_str = f"{det.context_window_tokens // 1000}K" if (det and det.context_window_tokens < 1_000_000) else f"{det.context_window_tokens // 1_000_000}M" if det else "N/A"
+                conf_str = f"{rm.token_count_method} ({rm.token_count_confidence:.2f})"
+                life_str = "active" if rm.lifecycle_status == "active" else rm.lifecycle_status
+                print(f" #{rm.rank:<4} {rm.model_id:<22} {rm.suitability_score:<6.2f} {tok_str:<17} {cost_str:<11} {ctx_str:<8} {conf_str:<10} {life_str}")
+            print("-" * 88)
+
+            # Stage 5: Recommend Model for Original Prompt
+            orig_top = orig_report.ranked_models[0] if orig_report.ranked_models else None
+            if orig_top:
+                orig_det = orig_report.model_details.get(orig_top.model_id)
+                top_cost_str = f"${orig_top.estimated_cost_usd:.5f}" if orig_top.estimated_cost_usd is not None else "N/A"
+                if is_single_model:
+                    print(f"\n{colors.BOLD}SUITABILITY ASSESSMENT FOR ORIGINAL PROMPT:{colors.RESET}")
+                    print(f"  Model ID:               {colors.BOLD}{orig_top.model_id}{colors.RESET} ({orig_top.display_name})")
+                    print(f"  Assessment Type:        Suitability assessment (1 model evaluated)")
+                else:
+                    print(f"\n{colors.BOLD}RECOMMENDED MODEL FOR ORIGINAL PROMPT:{colors.RESET}")
+                    print(f"  Model ID:               {colors.BOLD}{orig_top.model_id}{colors.RESET} ({orig_top.display_name})")
+                    print(f"  Recommendation Label:   Best estimated fit based on local heuristics (not measured benchmark quality)")
+
+                print(f"  Task Suitability:       {orig_top.suitability_score:.2f} / 1.00 (Task: {orig_report.task_classification.predicted_category})")
+                print(f"  Estimated Token Usage:  {orig_top.token_count} prompt tokens ({orig_top.token_count_method}, confidence {orig_top.token_count_confidence:.2f})")
+                print(f"  Estimated Cost:         {top_cost_str}")
+                print(f"  Context Fit:            {orig_det.context_window_tokens:,} tokens capacity" if orig_det else "Standard context")
+                print(f"  Recommendation Rationale: {orig_top.reasoning}")
+                if orig_top.token_count_disclaimer:
+                    print(f"  Token Limitation:       {colors.DIM}{orig_top.token_count_disclaimer}{colors.RESET}")
+            else:
+                print(f"\n{colors.YELLOW}[!] No verified eligible model available matching selection criteria.{colors.RESET}")
+
+            # ------------------------------------------------------------------
+            # Stage 6: Local Prompt Optimization
+            # ------------------------------------------------------------------
+            print(f"\n{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.BOLD}[STAGE 3/6] LOCAL PROMPT OPTIMIZATION{colors.RESET}")
+            print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.CYAN}Generating deterministic rule-based optimization (zero external API calls)...{colors.RESET}\n")
+
+            opt_res = prompt_optimizer.optimize_prompt(
+                prompt=prompt,
+                security_analysis=orig_analysis,
+                task_category=orig_report.task_classification.predicted_category,
+                user_clarification=user_clarification
+            )
+
+            print(f"{colors.BOLD}OPTIMIZATION SUMMARY:{colors.RESET}")
+            print(f"  • Disclaimer: {colors.DIM}{opt_res.optimizer_disclaimer}{colors.RESET}")
+            if opt_res.clarifications_or_assumptions:
+                print(f"  • Assumptions & Clarifications:")
+                for a in opt_res.clarifications_or_assumptions:
+                    print(f"    - {a}")
+            if opt_res.detected_risks_addressed:
+                print(f"  • Security Hardening Applied: {', '.join(opt_res.detected_risks_addressed)}")
+            print(f"  • Meaningful Changes:")
+            for c in opt_res.changes_summary:
+                print(f"    - {c}")
+
+            print(f"\n{colors.BOLD}OPTIMIZED PROMPT PREVIEW:{colors.RESET}")
+            print("┌" + "─" * 78 + "┐")
+            for line in opt_res.optimized_prompt.splitlines():
+                print(f"│ {line:<76} │")
+            print("└" + "─" * 78 + "┘")
+
+            # ------------------------------------------------------------------
+            # Stage 7: Reanalyse Optimized Prompt
+            # ------------------------------------------------------------------
+            print(f"\n{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.BOLD}[STAGE 4/6] OPTIMIZED PROMPT SECURITY RE-ANALYSIS{colors.RESET}")
+            print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.CYAN}Re-evaluating optimized prompt with the same security classifier pipeline...{colors.RESET}\n")
+
+            opt_analysis = analyze_prompt(opt_res.optimized_prompt, analysis_mode="both")
+
+            def _extract_ctrl_names(ctrl_list: Any) -> Set[str]:
+                names: Set[str] = set()
+                if isinstance(ctrl_list, list):
+                    for c in ctrl_list:
+                        if isinstance(c, dict):
+                            n = c.get("name") or c.get("matched_text")
+                            if n:
+                                names.add(str(n))
+                        elif isinstance(c, str):
+                            names.add(c)
+                return names
+
+            orig_sens = orig_analysis.get("sensitive_data", {})
+            opt_sens = opt_analysis.get("sensitive_data", {})
+            orig_sec_prob = orig_analysis.get("prompt_security", {}).get("malicious_probability", 0.0)
+            opt_sec_prob = opt_analysis.get("prompt_security", {}).get("malicious_probability", 0.0)
+            orig_risks_set = set(orig_analysis.get("application_risks", {}).get("detected_risks", []))
+            opt_risks_set = set(opt_analysis.get("application_risks", {}).get("detected_risks", []))
+            orig_controls_set = _extract_ctrl_names(orig_analysis.get("application_risks", {}).get("declared_controls", []))
+            opt_controls_set = _extract_ctrl_names(opt_analysis.get("application_risks", {}).get("declared_controls", []))
+
+            mitigated_surfaces_list = sorted(list(orig_risks_set - opt_risks_set))
+            new_controls_list = sorted(list(opt_controls_set - orig_controls_set))
+            remaining_risks_list = sorted(list(opt_risks_set))
+            unmitigated_after = opt_analysis.get("application_risks", {}).get("unmitigated_surfaces", [])
+
+            print(f"  • Prompt Injection Probability: {orig_sec_prob:.1%} → {opt_sec_prob:.1%}")
+            if orig_sens.get("detected") and not opt_sens.get("detected"):
+                print(f"  • Sensitive Data:               {colors.GREEN}[ RESOLVED ]{colors.RESET} Hardcoded secrets redacted and replaced with environment variables.")
+            elif opt_sens.get("detected"):
+                print(f"  • Sensitive Data:               {colors.RED}[ UNRESOLVED ]{colors.RESET} {opt_sens.get('findings_count')} secret(s) still present.")
+            else:
+                print(f"  • Sensitive Data:               {colors.GREEN}[ CLEAN ]{colors.RESET} No sensitive data in optimized prompt.")
+
+            if new_controls_list:
+                print(f"  • Declared Security Controls:   {colors.GREEN}[ +{len(new_controls_list)} ADDED ]{colors.RESET} ({', '.join(new_controls_list)})")
+
+            if mitigated_surfaces_list:
+                print(f"  • Mitigated Attack Surfaces:    {colors.GREEN}✓ {', '.join(mitigated_surfaces_list)}{colors.RESET}")
+
+            if remaining_risks_list:
+                print(f"  • Remaining Attack Surfaces:    {colors.YELLOW}! {', '.join(remaining_risks_list)}{colors.RESET}")
+                if unmitigated_after:
+                    print(f"    Unmitigated in prompt:        {', '.join(unmitigated_after)}")
+            else:
+                print(f"  • Remaining Attack Surfaces:    {colors.GREEN}[ None unmitigated in prompt ]{colors.RESET}")
+
+            print(f"\n  {colors.DIM}Verification Note: Declared mitigations in prompt instructions guide model generation, but static prompt analysis cannot prove an application is secure. Defense-in-depth and runtime verification remain essential.{colors.RESET}")
+
+            # ------------------------------------------------------------------
+            # Stage 8: Recompare Models for Optimized Prompt
+            # ------------------------------------------------------------------
+            print(f"\n{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.BOLD}[STAGE 5/6] FOUNDATION MODEL RE-COMPARISON (OPTIMIZED PROMPT){colors.RESET}")
+            print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
+            print(f"{colors.CYAN}Re-evaluating models with the optimized prompt using identical ranking parameters ({method.value.upper()}, {preset.value})...{colors.RESET}\n")
+
+            opt_report = comparison_engine.compare_prompt(
+                prompt=opt_res.optimized_prompt,
+                category=ProductCategory.FOUNDATION_MODEL,
+                method=method,
+                preset=preset,
+                model_ids=selected_ids
+            )
+
+            opt_top = opt_report.ranked_models[0] if opt_report.ranked_models else None
+            opt_det = opt_report.model_details.get(opt_top.model_id) if opt_top else None
+
+            if orig_top and opt_top:
+                same_winner = (orig_top.model_id == opt_top.model_id)
+                tok_delta = opt_top.token_count - orig_top.token_count
+                suit_delta = opt_top.suitability_score - orig_top.suitability_score
+                orig_cost_val = orig_top.estimated_cost_usd or 0.0
+                opt_cost_val = opt_top.estimated_cost_usd or 0.0
+                cost_delta = opt_cost_val - orig_cost_val
+
+                print(f"  • Recommended Model: {colors.BOLD}{orig_top.model_id}{colors.RESET} → {colors.BOLD}{opt_top.model_id}{colors.RESET} ({'UNCHANGED' if same_winner else 'CHANGED'})")
+                print(f"  • Suitability Score: {orig_top.suitability_score:.2f} → {opt_top.suitability_score:.2f} ({suit_delta:+.2f})")
+                print(f"  • Prompt Tokens:     {orig_top.token_count} → {opt_top.token_count} ({tok_delta:+d} tokens)")
+                print(f"  • Estimated Cost:    ${orig_cost_val:.5f} → ${opt_cost_val:.5f} ({cost_delta:+.5f})")
+
+                if same_winner:
+                    print(f"\n  Rationale: {opt_top.model_id} remains the top-recommended model for the optimized prompt, providing the strongest suitability balance for {opt_report.task_classification.predicted_category}.")
+                else:
+                    print(f"\n  Rationale: Recommendation changed from {orig_top.model_id} to {opt_top.model_id} due to expanded constraints and context requirements in the optimized prompt.")
+
+                print(f"\n  {colors.DIM}Cost & Token Note: The optimized prompt includes explicit security guardrails, edge cases, and output formatting, which naturally increases token count. We do not claim optimization reduced cost; explicit requirements improve specification quality.{colors.RESET}")
+
+            # ------------------------------------------------------------------
+            # Stage 9: Final Before-and-After Summary (Sections A to H)
+            # ------------------------------------------------------------------
+            print(f"\n" + "=" * 80)
+            print(f"{colors.BOLD}{colors.CYAN}                     COMPREHENSIVE BEFORE-AND-AFTER SUMMARY{colors.RESET}")
+            print("=" * 80)
+
+            # A. Original Prompt Security Summary
+            print(f"\n{colors.BOLD}A. ORIGINAL PROMPT SECURITY SUMMARY{colors.RESET}")
+            print(f"   • Prompt Injection Status: {'Malicious / Adversarial' if is_mal else 'Benign / Non-adversarial'} ({prob_val:.1%})")
+            print(f"   • Application Risks:       {', '.join(detected_risks) if detected_risks else 'None detected'}")
+            print(f"   • Hardcoded Secrets:       {sens.get('findings_count', 0)} detected (masked in reports)")
+            orig_ctrl_names = sorted(list(_extract_ctrl_names(declared_controls)))
+            print(f"   • Declared Controls:       {', '.join(orig_ctrl_names) if orig_ctrl_names else 'None'}")
+
+            # B. Original Prompt Model Recommendation
+            print(f"\n{colors.BOLD}B. ORIGINAL PROMPT MODEL RECOMMENDATION{colors.RESET}")
+            if orig_top:
+                rec_prefix = "Suitability Assessment:" if is_single_model else "Top Recommendation (Heuristic Fit):"
+                print(f"   • {rec_prefix} {orig_top.display_name} ({orig_top.model_id})")
+                print(f"   • Suitability Rating: {orig_top.suitability_score:.2f} / 1.00 | Est. Cost: ${orig_top.estimated_cost_usd or 0.0:.5f}")
+                print(f"   • Evaluation Rationale: {orig_top.reasoning}")
+
+            # C. Optimized Prompt
+            print(f"\n{colors.BOLD}C. OPTIMIZED PROMPT{colors.RESET}")
+            print("┌" + "─" * 78 + "┐")
+            for line in opt_res.optimized_prompt.splitlines():
+                print(f"│ {line:<76} │")
+            print("└" + "─" * 78 + "┘")
+
+            # D. Optimization Changes and Assumptions
+            print(f"\n{colors.BOLD}D. OPTIMIZATION CHANGES AND ASSUMPTIONS{colors.RESET}")
+            print(f"   • Rule-Based Rewrite Disclaimer: {opt_res.optimizer_disclaimer}")
+            print(f"   • Assumptions Made:")
+            for a in opt_res.clarifications_or_assumptions:
+                print(f"     - {a}")
+            print(f"   • Key Modifications:")
+            for c in opt_res.changes_summary:
+                print(f"     - {c}")
+
+            # E. Optimized Prompt Security Summary
+            print(f"\n{colors.BOLD}E. OPTIMIZED PROMPT SECURITY SUMMARY{colors.RESET}")
+            print(f"   • Prompt Injection Probability: {opt_sec_prob:.1%}")
+            print(f"   • Controls Injected & Verified: {', '.join(opt_controls_set) if opt_controls_set else 'Standard controls'}")
+            print(f"   • Mitigated Risks in Prompt:    {', '.join(mitigated_surfaces_list) if mitigated_surfaces_list else 'None'}")
+            print(f"   • Remaining Risk Surfaces:      {', '.join(remaining_risks_list) if remaining_risks_list else 'None'}")
+
+            # F. Model Recommendation for Optimized Prompt
+            print(f"\n{colors.BOLD}F. MODEL RECOMMENDATION FOR OPTIMIZED PROMPT{colors.RESET}")
+            if opt_top:
+                rec_prefix = "Suitability Assessment:" if is_single_model else "Top Recommendation (Heuristic Fit):"
+                print(f"   • {rec_prefix} {opt_top.display_name} ({opt_top.model_id})")
+                print(f"   • Suitability Rating: {opt_top.suitability_score:.2f} / 1.00 | Est. Cost: ${opt_top.estimated_cost_usd or 0.0:.5f}")
+                print(f"   • Evaluation Rationale: {opt_top.reasoning}")
+
+            # G. Before-and-After Token, Cost, and Suitability Comparison
+            print(f"\n{colors.BOLD}G. BEFORE-AND-AFTER TOKEN, COST, AND SUITABILITY COMPARISON{colors.RESET}")
+            print(f"   {'Metric':<25} {'Original Prompt':<22} {'Optimized Prompt':<22} {'Delta'}")
+            print(f"   " + "-" * 75)
+            orig_id_str = orig_top.model_id if orig_top else "N/A"
+            opt_id_str = opt_top.model_id if opt_top else "N/A"
+            orig_s_str = f"{orig_top.suitability_score:.2f}" if orig_top else "N/A"
+            opt_s_str = f"{opt_top.suitability_score:.2f}" if opt_top else "N/A"
+            s_delta_str = f"{(opt_top.suitability_score - orig_top.suitability_score):+.2f}" if (orig_top and opt_top) else "N/A"
+            orig_t_str = f"{orig_top.token_count}" if orig_top else "N/A"
+            opt_t_str = f"{opt_top.token_count}" if opt_top else "N/A"
+            t_delta_str = f"{(opt_top.token_count - orig_top.token_count):+d}" if (orig_top and opt_top) else "N/A"
+            orig_c_str = f"${orig_top.estimated_cost_usd:.5f}" if (orig_top and orig_top.estimated_cost_usd is not None) else "N/A"
+            opt_c_str = f"${opt_top.estimated_cost_usd:.5f}" if (opt_top and opt_top.estimated_cost_usd is not None) else "N/A"
+            c_delta_str = f"${(opt_top.estimated_cost_usd - orig_top.estimated_cost_usd):+.5f}" if (orig_top and opt_top and orig_top.estimated_cost_usd is not None and opt_top.estimated_cost_usd is not None) else "N/A"
+
+            print(f"   {'Top Model':<25} {orig_id_str:<22} {opt_id_str:<22} {'Same' if orig_id_str == opt_id_str else 'Changed'}")
+            print(f"   {'Suitability Score':<25} {orig_s_str:<22} {opt_s_str:<22} {s_delta_str}")
+            print(f"   {'Prompt Tokens':<25} {orig_t_str:<22} {opt_t_str:<22} {t_delta_str}")
+            print(f"   {'Total Est. Cost':<25} {orig_c_str:<22} {opt_c_str:<22} {c_delta_str}")
+
+            # H. Remaining Risks, Unverified Data, and Limitations
+            print(f"\n{colors.BOLD}H. REMAINING RISKS, UNVERIFIED DATA, AND LIMITATIONS{colors.RESET}")
+            print("   • Static Analysis Ceiling: Prompt analysis cannot verify downstream runtime execution, server config, or database permissions.")
+            print("   • Tokenizer Calibration: Non-OpenAI models use calibrated offline SentencePiece/BPE estimates.")
+            print("   • Pricing Data: Derived from verified public pricing (2026-10-26); unverified/preview models were excluded from ranking.")
+            print("   • Recommendation Heuristic: Scores reflect relative multi-criteria trade-offs [0.0, 1.0], not empirical benchmark performance.")
+            print("=" * 80)
+
+            # ------------------------------------------------------------------
+            # Stage 10: Next Actions Menu
+            # ------------------------------------------------------------------
+            sub_action = None
+            while True:
+                print(f"\n{colors.BOLD}Next Actions:{colors.RESET}")
+                print("  [1] Save the optimized prompt to a text file")
+                print("  [2] Optimize again with a different objective or constraints")
+                print("  [3] Compare selected models for this prompt")
+                print("  [4] Start a new prompt analysis")
+                print("  [5] Return to the main menu")
+
+                try:
+                    choice_act = input(f"{colors.CYAN}Select an action (1-5):{colors.RESET} ").strip()
+                except (KeyboardInterrupt, EOFError):
+                    return
+
+                if choice_act == "1":
+                    save_prompt_to_file(colors, opt_res.optimized_prompt)
+                elif choice_act == "2":
+                    try:
+                        new_obj = input(f"\n{colors.CYAN}Enter new objective or extra requirements (or 'c' to cancel):{colors.RESET} ").strip()
+                    except (KeyboardInterrupt, EOFError):
+                        return
+                    if new_obj.lower() not in {"c", "cancel", ""}:
+                        user_clarification = new_obj
+                        sub_action = "reoptimize"
+                        break
+                elif choice_act == "3":
+                    print(f"\n{colors.BOLD}Eligible Active Foundation Models:{colors.RESET}")
+                    for idx, m in enumerate(eligible_models, 1):
+                        print(f"  [{idx:2d}] {m.model_id:<24} ({m.display_name})")
+                    try:
+                        custom_in = input(f"\n{colors.CYAN}Enter comma-separated numbers or IDs (or 'c' to cancel):{colors.RESET} ").strip()
+                    except (KeyboardInterrupt, EOFError):
+                        return
+                    if custom_in.lower() not in {"c", "cancel", ""}:
+                        parts = [p.strip() for p in custom_in.split(",") if p.strip()]
+                        custom_ids: List[str] = []
+                        for p in parts:
+                            if p.isdigit() and 1 <= int(p) <= len(eligible_models):
+                                custom_ids.append(eligible_models[int(p) - 1].model_id)
+                            elif registry.get_foundation_model(p):
+                                custom_ids.append(p)
+                        if custom_ids:
+                            selected_ids = list(dict.fromkeys(custom_ids))
+                            sub_action = "recompare"
+                            break
+                elif choice_act == "4":
+                    sub_action = "new"
+                    break
+                elif choice_act in {"5", "return", "menu", "c", "cancel"}:
+                    return
+                else:
+                    print(f"{colors.RED}[!] Invalid selection '{choice_act}'. Please choose between 1 and 5.{colors.RESET}")
+
+            if sub_action in {"reoptimize", "recompare"}:
+                continue
+            elif sub_action == "new":
+                active_prompt = None
+                break
+
+
+# ===========================================================================
+# Option 2: Standalone Prompt Security Analysis
 # ===========================================================================
 
 def cli_prompt_security_analysis(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
     """Runs interactive prompt security and architectural risk analysis."""
     print("\n" + "=" * 80)
-    print(f"{colors.BOLD}{colors.CYAN}1. PROMPT SECURITY & ARCHITECTURAL RISK ANALYSIS{colors.RESET}")
+    print(f"{colors.BOLD}{colors.CYAN}2. STANDALONE PROMPT SECURITY & ARCHITECTURAL RISK ANALYSIS{colors.RESET}")
     print("=" * 80)
+
 
     if preloaded_prompt:
         prompt = preloaded_prompt.strip()
@@ -697,15 +1280,16 @@ def cli_prompt_security_analysis(colors: Colors, preloaded_prompt: Optional[str]
 
 
 # ===========================================================================
-# Option 2: Offline Foundation Model Comparison
+# Option 3: Offline Foundation Model Comparison
 # ===========================================================================
 
 def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
     """Interactively compares verified foundation models 100% locally."""
     while True:
         print("\n" + "=" * 80)
-        print(f"{colors.BOLD}{colors.CYAN}2. OFFLINE FOUNDATION MODEL COMPARISON{colors.RESET}")
+        print(f"{colors.BOLD}{colors.CYAN}3. OFFLINE FOUNDATION MODEL COMPARISON{colors.RESET}")
         print("=" * 80)
+
         print(f"{colors.DIM}Strictly 100% offline. Zero provider API calls, zero telemetry.{colors.RESET}")
 
         if preloaded_prompt:
@@ -888,14 +1472,15 @@ def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str
 
 
 # ===========================================================================
-# Option 3: IDE Coding Assistant Comparison
+# Option 4: IDE Coding Assistant Comparison
 # ===========================================================================
 
 def cli_compare_ide_assistants(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
     """Compares verified IDE coding assistants using workflow and tooling criteria."""
     print("\n" + "=" * 80)
-    print(f"{colors.BOLD}{colors.CYAN}3. IDE CODING ASSISTANT COMPARISON{colors.RESET}")
+    print(f"{colors.BOLD}{colors.CYAN}4. IDE CODING ASSISTANT COMPARISON{colors.RESET}")
     print("=" * 80)
+
     print(f"{colors.DIM}Evaluates multi-file agents, repo indexing, terminal execution, and privacy.{colors.RESET}")
 
     if preloaded_prompt:
@@ -959,14 +1544,15 @@ def cli_compare_ide_assistants(colors: Colors, preloaded_prompt: Optional[str] =
 
 
 # ===========================================================================
-# Option 4: AI App Builder Comparison
+# Option 5: AI App Builder Comparison
 # ===========================================================================
 
 def cli_compare_app_builders(colors: Colors, preloaded_prompt: Optional[str] = None) -> None:
     """Compares verified AI app builders using full-stack capabilities and deployment."""
     print("\n" + "=" * 80)
-    print(f"{colors.BOLD}{colors.CYAN}4. AI APP BUILDER COMPARISON{colors.RESET}")
+    print(f"{colors.BOLD}{colors.CYAN}5. AI APP BUILDER COMPARISON{colors.RESET}")
     print("=" * 80)
+
     print(f"{colors.DIM}Evaluates full-stack backends, database/auth support, UI quality, and code export.{colors.RESET}")
 
     if preloaded_prompt:
@@ -1035,15 +1621,16 @@ def cli_compare_app_builders(colors: Colors, preloaded_prompt: Optional[str] = N
 
 
 # ===========================================================================
-# Option 5: Inspect Model/Product Catalogue
+# Option 6: Inspect Model/Product Catalogue
 # ===========================================================================
 
 def cli_inspect_catalogue(colors: Colors) -> None:
     """Inspects verified metadata, lifecycle status, pricing, and provenance across categories."""
     while True:
         print("\n" + "=" * 80)
-        print(f"{colors.BOLD}{colors.CYAN}5. INSPECT MODEL & PRODUCT CATALOGUE{colors.RESET}")
+        print(f"{colors.BOLD}{colors.CYAN}6. INSPECT MODEL & PRODUCT CATALOGUE{colors.RESET}")
         print("=" * 80)
+
         print("Select category to inspect:")
         print("  [1] Foundation Models (17 active GA, 7 unverified/preview/legacy)")
         print("  [2] IDE Coding Assistants (4 verified products)")
@@ -1271,13 +1858,13 @@ def cli_inspect_catalogue(colors: Colors) -> None:
 
 
 # ===========================================================================
-# Option 6: Text File Analysis
+# Option 7: Text File Analysis
 # ===========================================================================
 
 def cli_file_analysis(colors: Colors) -> None:
-    """Safely loads a local text file and offers security or comparison analysis."""
+    """Safely loads a local text file and offers security, comparison, or full workflow."""
     print("\n" + "=" * 80)
-    print(f"{colors.BOLD}{colors.CYAN}6. ANALYSE PROMPT FROM FILE{colors.RESET}")
+    print(f"{colors.BOLD}{colors.CYAN}7. ANALYSE PROMPT FROM FILE{colors.RESET}")
     print("=" * 80)
 
     try:
@@ -1346,37 +1933,41 @@ def cli_file_analysis(colors: Colors) -> None:
     print(f"\n{colors.GREEN}✓ File loaded successfully:{colors.RESET} {file_path.name}")
     print(f"  Length: {len(content)} chars | {len(content.split())} words | {len(content.splitlines())} lines")
     print("\nSelect action for loaded file content:")
-    print("  [1] Analyse prompt for security vulnerabilities & attack surfaces")
-    print("  [2] Compare foundation models for this task")
-    print("  [3] Compare IDE coding assistants for this task")
-    print("  [4] Compare AI app builders for this task")
+    print("  [1] Run complete end-to-end workflow (Security + Recommendation + Optimization)")
+    print("  [2] Standalone security analysis")
+    print("  [3] Compare foundation models for this task")
+    print("  [4] Compare IDE coding assistants for this task")
+    print("  [5] Compare AI app builders for this task")
     print("  [0] Cancel and return to main menu")
 
     try:
-        action = input(f"{colors.CYAN}Select action (0-4):{colors.RESET} ").strip()
+        action = input(f"{colors.CYAN}Select action (0-5):{colors.RESET} ").strip()
     except (KeyboardInterrupt, EOFError):
         return
 
     if action == "1":
-        cli_prompt_security_analysis(colors, preloaded_prompt=content)
+        cli_complete_end_to_end_workflow(colors, preloaded_prompt=content)
     elif action == "2":
-        cli_compare_foundation_models(colors, preloaded_prompt=content)
+        cli_prompt_security_analysis(colors, preloaded_prompt=content)
     elif action == "3":
-        cli_compare_ide_assistants(colors, preloaded_prompt=content)
+        cli_compare_foundation_models(colors, preloaded_prompt=content)
     elif action == "4":
+        cli_compare_ide_assistants(colors, preloaded_prompt=content)
+    elif action == "5":
         cli_compare_app_builders(colors, preloaded_prompt=content)
     else:
         print(f"{colors.YELLOW}[i] Operation cancelled.{colors.RESET}")
 
 
+
 # ===========================================================================
-# Option 7: View Help and Limitations
+# Option 8: View Help and Limitations
 # ===========================================================================
 
 def cli_view_help_and_limitations(colors: Colors) -> None:
     """Displays platform guide, technical methodologies, and operational constraints."""
     print("\n" + "=" * 80)
-    print(f"{colors.BOLD}{colors.CYAN}7. PROMPTSHIELD AI — HELP & ARCHITECTURAL LIMITATIONS{colors.RESET}")
+    print(f"{colors.BOLD}{colors.CYAN}8. PROMPTSHIELD AI — HELP & ARCHITECTURAL LIMITATIONS{colors.RESET}")
     print("=" * 80)
     print(f"""
 {colors.BOLD}PLATFORM ARCHITECTURE & WORKING RULES:{colors.RESET}
@@ -1437,41 +2028,44 @@ def run_interactive_cli(colors: Colors) -> None:
         print(f"{colors.BOLD}PROMPTSHIELD AI{colors.RESET}")
         print("Local Prompt Security & Model Recommendation Workspace")
         print("=" * 80)
-        print("  1. Analyse a prompt for security vulnerabilities")
-        print("  2. Compare foundation models for a task")
-        print("  3. Compare IDE coding assistants")
-        print("  4. Compare AI app builders")
-        print("  5. Inspect model/product catalogue")
-        print("  6. Analyse a prompt from a file")
-        print("  7. View help and limitations")
+        print("  1. Analyse, compare and optimize a prompt (Complete Workflow)")
+        print("  2. Standalone security analysis")
+        print("  3. Compare foundation models for a task")
+        print("  4. Compare IDE coding assistants")
+        print("  5. Compare AI app builders")
+        print("  6. Inspect model/product catalogue")
+        print("  7. Analyse a prompt from a file")
+        print("  8. View help and limitations")
         print("  0. Exit")
         print("=" * 80)
 
         try:
-            choice = input(f"{colors.CYAN}Select an option (0-7):{colors.RESET} ").strip().lower()
+            choice = input(f"{colors.CYAN}Select an option (0-8):{colors.RESET} ").strip().lower()
         except (KeyboardInterrupt, EOFError):
             print(f"\n\n{colors.CYAN}Exiting PromptShield AI. Goodbye!{colors.RESET}\n")
             sys.exit(0)
 
-        if choice in {"1", "analyse", "security"}:
+        if choice in {"1", "flow", "workflow", "optimize", "complete"}:
+            cli_complete_end_to_end_workflow(colors)
+        elif choice in {"2", "analyse", "security"}:
             cli_prompt_security_analysis(colors)
-        elif choice in {"2", "compare", "models"}:
+        elif choice in {"3", "compare", "models"}:
             cli_compare_foundation_models(colors)
-        elif choice in {"3", "ide", "ides"}:
+        elif choice in {"4", "ide", "ides"}:
             cli_compare_ide_assistants(colors)
-        elif choice in {"4", "app", "builder", "builders"}:
+        elif choice in {"5", "app", "builder", "builders"}:
             cli_compare_app_builders(colors)
-        elif choice in {"5", "inspect", "catalogue"}:
+        elif choice in {"6", "inspect", "catalogue"}:
             cli_inspect_catalogue(colors)
-        elif choice in {"6", "file"}:
+        elif choice in {"7", "file"}:
             cli_file_analysis(colors)
-        elif choice in {"7", "help"}:
+        elif choice in {"8", "help"}:
             cli_view_help_and_limitations(colors)
         elif choice in {"0", "exit", "quit", "q"}:
             print(f"\n{colors.CYAN}Thank you for using PromptShield AI. Goodbye!{colors.RESET}\n")
             sys.exit(0)
         else:
-            print(f"{colors.RED}[!] Invalid choice '{choice}'. Please select a number between 0 and 7.{colors.RESET}")
+            print(f"{colors.RED}[!] Invalid choice '{choice}'. Please select a number between 0 and 8.{colors.RESET}")
 
 
 def main():
