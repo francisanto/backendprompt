@@ -94,7 +94,7 @@ class CandidateEvaluation:
     display_name: str
     provider: str
     token_count: int
-    token_count_method: str  # "exact", "estimated"
+    token_count_method: str  # "exact", "approximate", "unsupported"
     suitability_score: float  # [0.0, 1.0]
     total_cost_usd: Optional[float]
     input_cost_usd: Optional[float]
@@ -102,11 +102,13 @@ class CandidateEvaluation:
     context_window_tokens: int
     lifecycle_status: str = "active"
     latency_ms: Optional[float] = None  # None if unavailable
-    pricing_date: str = "2025-02-15"
+    pricing_date: str = "2026-10-26"
     pricing_status: str = "known"
     estimated_output_tokens: int = 350
     input_cost_per_m: Optional[float] = None
     output_cost_per_m: Optional[float] = None
+    token_count_confidence: float = 1.0
+    token_count_disclaimer: str = ""
 
 
 @dataclass
@@ -129,6 +131,9 @@ class RankedModel:
         "Relative multi-criteria heuristic recommendation score [0.0, 1.0]. "
         "Not a measured benchmark, answer quality, latency, or probability of success."
     )
+    token_count_method: str = "exact"
+    token_count_confidence: float = 1.0
+    token_count_disclaimer: str = ""
 
 
 def _generate_candidate_reasoning(
@@ -175,8 +180,10 @@ def _generate_candidate_reasoning(
     # 4. Token provenance note
     if c.token_count_method == "exact":
         reasons.append("Exact local BPE token count")
-    else:
+    elif c.token_count_method == "approximate":
         reasons.append("Calibrated offline token estimate")
+    else:
+        reasons.append("Heuristic token estimate")
 
     # 5. Lifecycle warning if not active
     if c.lifecycle_status == "deprecated":
@@ -215,7 +222,10 @@ def rank_models_weighted_sum(
             latency_status="measured" if c.latency_ms is not None else "unavailable",
             benchmark_status="unavailable (offline platform does not fabricate third-party benchmark scores)",
             reasoning=reason,
-            lifecycle_status=c.lifecycle_status
+            lifecycle_status=c.lifecycle_status,
+            token_count_method=c.token_count_method,
+            token_count_confidence=getattr(c, "token_count_confidence", 1.0),
+            token_count_disclaimer=getattr(c, "token_count_disclaimer", "")
         )]
 
     w = validate_and_normalize_weights(weights, preset)
@@ -284,7 +294,10 @@ def rank_models_weighted_sum(
             latency_status="measured" if c.latency_ms is not None else "unavailable",
             benchmark_status="unavailable (offline platform does not fabricate third-party benchmark scores)",
             reasoning=reason_str,
-            lifecycle_status=c.lifecycle_status
+            lifecycle_status=c.lifecycle_status,
+            token_count_method=c.token_count_method,
+            token_count_confidence=getattr(c, "token_count_confidence", 1.0),
+            token_count_disclaimer=getattr(c, "token_count_disclaimer", "")
         ))
 
     # Sort descending by score; break ties with suitability then lower cost
@@ -331,7 +344,10 @@ def rank_models_topsis(
             latency_status="measured" if c.latency_ms is not None else "unavailable",
             benchmark_status="unavailable (offline platform does not fabricate third-party benchmark scores)",
             reasoning=reason,
-            lifecycle_status=c.lifecycle_status
+            lifecycle_status=c.lifecycle_status,
+            token_count_method=c.token_count_method,
+            token_count_confidence=getattr(c, "token_count_confidence", 1.0),
+            token_count_disclaimer=getattr(c, "token_count_disclaimer", "")
         )]
 
     w = validate_and_normalize_weights(weights, preset)
@@ -413,7 +429,10 @@ def rank_models_topsis(
             latency_status="measured" if c.latency_ms is not None else "unavailable",
             benchmark_status="unavailable (offline platform does not fabricate third-party benchmark scores)",
             reasoning=reason_str,
-            lifecycle_status=c.lifecycle_status
+            lifecycle_status=c.lifecycle_status,
+            token_count_method=c.token_count_method,
+            token_count_confidence=getattr(c, "token_count_confidence", 1.0),
+            token_count_disclaimer=getattr(c, "token_count_disclaimer", "")
         ))
 
     # Sort descending by closeness score; break ties with suitability

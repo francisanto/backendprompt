@@ -49,7 +49,7 @@ class ModelComparisonDetails:
     provider: str
     context_window_tokens: int
     token_count: int
-    token_count_method: str  # "exact", "estimated", "unsupported"
+    token_count_method: str  # "exact", "approximate", "unsupported"
     is_exact_token_count: bool
     estimated_output_tokens: int
     cost_breakdown: CostBreakdown
@@ -59,9 +59,11 @@ class ModelComparisonDetails:
     provenance: Dict[str, str]
     lifecycle_status: str = "active"
     source_url: str = ""
-    verification_date: str = "2026-10-25"
-    last_audit_date: str = "2026-10-25"
+    verification_date: str = "2026-10-26"
+    last_audit_date: str = "2026-10-26"
     unverified_fields: List[str] = field(default_factory=list)
+    token_count_confidence: float = 1.0
+    token_count_disclaimer: str = ""
 
 
 @dataclass
@@ -183,7 +185,7 @@ class ModelComparisonEngine:
                     display_name=model.display_name,
                     provider=model.provider,
                     token_count=tok_res.token_count,
-                    token_count_method=tok_res.method,
+                    token_count_method=tok_res.token_count_method,
                     suitability_score=suitability,
                     total_cost_usd=cost.total_estimated_cost_usd,
                     input_cost_usd=cost.input_cost_usd,
@@ -195,7 +197,9 @@ class ModelComparisonEngine:
                     pricing_status=cost.pricing_status,
                     estimated_output_tokens=output_tokens,
                     input_cost_per_m=model.pricing.input_cost_per_m,
-                    output_cost_per_m=model.pricing.output_cost_per_m
+                    output_cost_per_m=model.pricing.output_cost_per_m,
+                    token_count_confidence=tok_res.token_count_confidence,
+                    token_count_disclaimer=tok_res.token_count_disclaimer
                 ))
 
                 details_map[model.model_id] = ModelComparisonDetails(
@@ -204,7 +208,7 @@ class ModelComparisonEngine:
                     provider=model.provider,
                     context_window_tokens=model.context_window_tokens,
                     token_count=tok_res.token_count,
-                    token_count_method=tok_res.method,
+                    token_count_method=tok_res.token_count_method,
                     is_exact_token_count=tok_res.is_exact,
                     estimated_output_tokens=output_tokens,
                     cost_breakdown=cost,
@@ -224,8 +228,10 @@ class ModelComparisonEngine:
                     lifecycle_status=model.lifecycle_status.value if hasattr(model.lifecycle_status, "value") else str(model.lifecycle_status),
                     source_url=model.source_url,
                     verification_date=model.verification_date,
-                    last_audit_date=getattr(model, "last_audit_date", "2026-10-25"),
-                    unverified_fields=getattr(model, "unverified_fields", [])
+                    last_audit_date=getattr(model, "last_audit_date", "2026-10-26"),
+                    unverified_fields=getattr(model, "unverified_fields", []),
+                    token_count_confidence=tok_res.token_count_confidence,
+                    token_count_disclaimer=tok_res.token_count_disclaimer
                 )
 
             ranked = rank_models(

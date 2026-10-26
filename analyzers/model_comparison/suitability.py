@@ -67,24 +67,22 @@ def get_suitability_breakdown(
         or features.technical_keyword_density > 0.40
     )
     if is_coding_task:
-        if model.model_id in ["claude-sonnet-5-5", "gpt-6-astra", "claude-3-7-sonnet", "o1"]:
+        if model.model_id in ["claude-3-7-sonnet", "o1", "deepseek-reasoner", "claude-sonnet-5-5", "gpt-6-astra"]:
             code_score = 0.98
-        elif model.model_id in ["gemini-4-argon", "claude-opus-5-5", "o3-mini", "claude-3-5-sonnet"]:
+        elif model.model_id in ["o3-mini", "claude-3-5-sonnet", "deepseek-chat", "gemini-4-argon", "claude-opus-5-5"]:
             code_score = 0.96
-        elif model.model_id in ["gpt-6-sol", "gpt-4o"]:
+        elif model.model_id in ["gpt-4o", "gemini-1.5-pro", "gpt-6-sol"]:
             code_score = 0.95
-        elif model.model_id in ["grok-4-7", "gemini-2.5-pro", "gemini-1.5-pro", "gpt-4-turbo"]:
+        elif model.model_id in ["gemini-2.0-flash", "gpt-4-turbo", "grok-4-7", "gemini-2.5-pro"]:
             code_score = 0.92
-        elif model.model_id in ["grok-3"]:
-            code_score = 0.91
-        elif model.model_id in ["gemini-3-8-flash", "gemini-2.0-flash", "gemini-2.5-flash"]:
+        elif model.model_id in ["grok-2", "grok-3"]:
+            code_score = 0.90
+        elif model.model_id in ["claude-3-5-haiku", "gemini-2.0-flash-lite", "gemini-3-8-flash", "gemini-2.5-flash"]:
             code_score = 0.88
-        elif model.model_id in ["gpt-6-luna", "claude-haiku-5-5", "claude-3-5-haiku"]:
+        elif model.model_id in ["gpt-4o-mini", "gemini-1.5-flash", "gpt-6-luna", "claude-haiku-5-5"]:
             code_score = 0.85
-        elif model.model_id in ["grok-4-3", "grok-3-mini", "claude-3-opus"]:
+        elif model.model_id in ["claude-3-opus", "grok-2-vision", "grok-4-3", "grok-3-mini"]:
             code_score = 0.83
-        elif model.model_id == "gpt-4o-mini":
-            code_score = 0.80
         elif "code_generation" in capabilities:
             code_score = 0.82
         else:
@@ -94,15 +92,16 @@ def get_suitability_breakdown(
 
     # 3. Complexity Matching Score
     is_flagship = model.model_id in [
-        "gpt-6-astra", "gpt-6-sol", "gemini-4-argon", "claude-sonnet-5-5", "claude-opus-5-5", "grok-4-7",
-        "claude-3-7-sonnet", "o1", "o3-mini", "gpt-4o", "gemini-2.5-pro", "grok-3",
-        "claude-3-5-sonnet", "gemini-1.5-pro", "claude-3-opus", "gpt-4-turbo"
+        "claude-3-7-sonnet", "claude-3-5-sonnet", "o1", "o3-mini", "gpt-4o",
+        "gemini-1.5-pro", "claude-3-opus", "deepseek-reasoner", "deepseek-chat", "grok-2",
+        "gemini-2.5-pro", "grok-3", "gpt-4-turbo",
+        "gpt-6-astra", "gpt-6-sol", "gemini-4-argon", "claude-sonnet-5-5", "claude-opus-5-5", "grok-4-7"
     ] or "complex_reasoning" in capabilities or "hybrid_reasoning" in capabilities or "deep_thinking" in capabilities
 
     is_lightweight = model.model_id in [
-        "gpt-6-luna", "gemini-3-8-flash", "claude-haiku-5-5", "grok-4-3",
-        "gpt-4o-mini", "gemini-2.5-flash", "gemini-2.0-flash", "claude-3-5-haiku", "grok-3-mini",
-        "gemini-1.5-flash", "gpt-3.5-turbo"
+        "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.0-flash-lite", "claude-3-5-haiku",
+        "gemini-1.5-flash", "o1-mini", "gemini-2.5-flash", "grok-3-mini", "gpt-3.5-turbo",
+        "gpt-6-luna", "gemini-3-8-flash", "claude-haiku-5-5", "grok-4-3"
     ] or "fast_inference" in capabilities or "high_speed" in capabilities
 
     if features.complexity_score >= 0.40:
