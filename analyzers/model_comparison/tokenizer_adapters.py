@@ -376,7 +376,7 @@ def get_tokenizer_adapter(model_id: str) -> BaseTokenizerAdapter:
     low = model_id.lower()
     if "gpt" in low or "o1" in low or "o3" in low:
         # Modern frontier GPT and reasoning models use o200k_base; legacy GPT-3.5/GPT-4 use cl100k_base
-        encoding = "o200k_base" if ("4o" in low or "o1" in low or "o3" in low) else "cl100k_base"
+        encoding = "o200k_base" if ("4o" in low or "o1" in low or "o3" in low or "gpt-5" in low or "gpt-6" in low) else "cl100k_base"
         return OpenAITokenizerAdapter(model_id=model_id, encoding_name=encoding)
     elif "gemini" in low:
         return GeminiTokenizerAdapter(model_id=model_id)

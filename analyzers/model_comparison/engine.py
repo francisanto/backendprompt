@@ -123,7 +123,8 @@ class ModelComparisonEngine:
         custom_weights: Optional[Dict[str, float]] = None,
         model_ids: Optional[List[str]] = None,
         output_tokens_override: Optional[int] = None,
-        include_deprecated: bool = False
+        include_deprecated: bool = False,
+        include_preview: bool = False
     ) -> ModelComparisonReport:
         """
         Runs local prompt analysis, feature extraction, and multi-criteria ranking
@@ -148,10 +149,13 @@ class ModelComparisonEngine:
                 target_models = []
                 for mid in model_ids:
                     m = self.registry.get_foundation_model(mid)
-                    if m and (include_deprecated or self.registry.is_model_eligible(m.model_id, category)):
+                    if m and (include_deprecated or self.registry.is_model_eligible(m.model_id, category, include_preview=include_preview)):
                         target_models.append(m)
             else:
-                target_models = self.registry.list_models(include_deprecated=include_deprecated)
+                target_models = self.registry.list_models(
+                    include_deprecated=include_deprecated,
+                    include_preview=include_preview
+                )
 
             candidates: List[CandidateEvaluation] = []
             details_map: Dict[str, ModelComparisonDetails] = {}
