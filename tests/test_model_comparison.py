@@ -80,38 +80,60 @@ def client():
 def test_model_registry_coverage_and_lifecycle():
     # 1. Default recommendation pool excludes deprecated, retired, preview, and unverified models
     active_models = registry.list_models(include_deprecated=False)
-    assert len(active_models) == 17, f"Expected exactly 17 active models, found {len(active_models)}"
+    assert len(active_models) == 22, f"Expected exactly 22 active models, found {len(active_models)}"
     assert all(m.lifecycle_status == LifecycleStatus.ACTIVE for m in active_models)
     assert all(registry.is_model_eligible(m.model_id) for m in active_models)
 
-    # Verify key active frontier models
+    # Verify modern active models across 5 providers
     active_ids = {m.model_id for m in active_models}
-    # OpenAI
-    assert "gpt-4o" in active_ids
-    assert "gpt-4o-mini" in active_ids
-    assert "o1" in active_ids
-    assert "o1-mini" in active_ids
-    assert "o3-mini" in active_ids
-    # Google
-    assert "gemini-2.0-flash" in active_ids
-    assert "gemini-2.0-flash-lite" in active_ids
-    assert "gemini-1.5-pro" in active_ids
-    assert "gemini-1.5-flash" in active_ids
-    # Anthropic
-    assert "claude-3-7-sonnet" in active_ids
-    assert "claude-3-5-sonnet" in active_ids
-    assert "claude-3-5-haiku" in active_ids
-    assert "claude-3-opus" in active_ids
-    # xAI
-    assert "grok-2" in active_ids
-    assert "grok-2-vision" in active_ids
-    # DeepSeek
-    assert "deepseek-chat" in active_ids
+
+    # OpenAI (7 modern verified models)
+    assert "gpt-5.5" in active_ids
+    assert "gpt-5.5-pro" in active_ids
+    assert "gpt-5" in active_ids
+    assert "gpt-5-mini" in active_ids
+    assert "gpt-6-astra" in active_ids
+    assert "gpt-6-sol" in active_ids
+    assert "gpt-6-luna" in active_ids
+
+    # Google (6 modern verified models)
+    assert "gemini-4-argon" in active_ids
+    assert "gemini-3.8-flash" in active_ids
+    assert "gemini-3.7-flash" in active_ids
+    assert "gemini-3.6-flash" in active_ids
+    assert "gemini-3.5-flash" in active_ids
+    assert "gemini-3.5-flash-lite" in active_ids
+
+    # Anthropic (3 modern verified models)
+    assert "claude-opus-5-5" in active_ids
+    assert "claude-sonnet-5-5" in active_ids
+    assert "claude-haiku-5-5" in active_ids
+
+    # xAI (2 modern verified models)
+    assert "grok-4-7" in active_ids
+    assert "grok-4-3" in active_ids
+
+    # DeepSeek (4 modern verified models)
+    assert "deepseek-v4-pro" in active_ids
+    assert "deepseek-flash" in active_ids
     assert "deepseek-reasoner" in active_ids
+    assert "deepseek-chat" in active_ids
+
+    # Crucial negative tests: Gemini 1.x models MUST NOT be active
+    assert "gemini-1.0-pro" not in active_ids
+    assert "gemini-1.5-pro" not in active_ids
+    assert "gemini-1.5-flash" not in active_ids
+
+    # Retired legacy models MUST NOT be active
+    assert "gpt-4o" not in active_ids
+    assert "gpt-4o-mini" not in active_ids
+    assert "o1" not in active_ids
+    assert "claude-3-7-sonnet" not in active_ids
+    assert "gemini-2.0-flash" not in active_ids
 
     # 2. Including deprecated/retired/preview exposes full historical catalogue
     all_models = registry.list_models(include_deprecated=True)
-    assert len(all_models) >= 24, f"Expected at least 24 total models, found {len(all_models)}"
+    assert len(all_models) >= 40, f"Expected at least 40 total models, found {len(all_models)}"
 
     providers = {m.provider for m in all_models}
     assert "openai" in providers
@@ -131,13 +153,28 @@ def test_audit_target_models_lifecycle_and_provenance():
     """
     # Active GA targets (verified in official docs)
     ga_targets = [
-        ("gemini-2.0-flash", 1_048_576, 0.10, 0.40),
-        ("claude-3-5-haiku", 200_000, 0.80, 4.00),
-        ("gpt-4o", 128_000, 2.50, 10.00),
-        ("gpt-4o-mini", 128_000, 0.15, 0.60),
-        ("o1", 200_000, 15.00, 60.00),
-        ("o3-mini", 200_000, 1.10, 4.40),
-        ("claude-3-7-sonnet", 200_000, 3.00, 15.00),
+        ("gpt-5.5", 1_050_000, 5.00, 30.00),
+        ("gpt-5.5-pro", 1_050_000, 30.00, 180.00),
+        ("gpt-5", 400_000, 1.25, 10.00),
+        ("gpt-5-mini", 400_000, 0.25, 2.00),
+        ("gpt-6-astra", 1_050_000, 10.00, 50.00),
+        ("gpt-6-sol", 1_050_000, 2.00, 10.00),
+        ("gpt-6-luna", 1_050_000, 0.10, 0.50),
+        ("gemini-4-argon", 1_048_576, 2.00, 10.00),
+        ("gemini-3.8-flash", 1_048_576, 0.75, 3.75),
+        ("gemini-3.7-flash", 1_048_576, 0.75, 3.75),
+        ("gemini-3.6-flash", 1_048_576, 0.75, 3.75),
+        ("gemini-3.5-flash", 1_048_576, 1.50, 9.00),
+        ("gemini-3.5-flash-lite", 1_048_576, 0.30, 2.50),
+        ("claude-opus-5-5", 1_000_000, 4.00, 20.00),
+        ("claude-sonnet-5-5", 1_000_000, 3.00, 15.00),
+        ("claude-haiku-5-5", 1_000_000, 0.10, 0.50),
+        ("grok-4-7", 500_000, 2.00, 6.00),
+        ("grok-4-3", 1_000_000, 1.25, 2.50),
+        ("deepseek-v4-pro", 1_000_000, 0.66, 1.98),
+        ("deepseek-flash", 1_000_000, 0.15, 0.60),
+        ("deepseek-reasoner", 64_000, 0.55, 2.19),
+        ("deepseek-chat", 64_000, 0.14, 0.28),
     ]
 
     for model_id, expected_ctx, exp_in_cost, exp_out_cost in ga_targets:
@@ -153,10 +190,17 @@ def test_audit_target_models_lifecycle_and_provenance():
 
     # Excluded targets: unverified, preview, or deprecated/retired
     excluded_targets = [
+        ("gemini-3.1-pro-preview", LifecycleStatus.PREVIEW),
         ("gemini-2.5-pro", LifecycleStatus.UNVERIFIED),
         ("gemini-2.5-flash", LifecycleStatus.UNVERIFIED),
         ("grok-3", LifecycleStatus.PREVIEW),
         ("grok-3-mini", LifecycleStatus.PREVIEW),
+        ("gemini-1.5-pro", LifecycleStatus.RETIRED),
+        ("gemini-1.5-flash", LifecycleStatus.RETIRED),
+        ("gemini-1.0-pro", LifecycleStatus.RETIRED),
+        ("gemini-2.0-flash", LifecycleStatus.RETIRED),
+        ("gpt-4o", LifecycleStatus.RETIRED),
+        ("claude-3-7-sonnet", LifecycleStatus.RETIRED),
         ("gpt-4-turbo", LifecycleStatus.DEPRECATED),
         ("gpt-3.5-turbo", LifecycleStatus.RETIRED),
     ]
@@ -168,6 +212,83 @@ def test_audit_target_models_lifecycle_and_provenance():
         assert registry.is_model_eligible(model_id) is False, (
             f"Target '{model_id}' ({expected_status}) must NOT be eligible for default rankings"
         )
+
+
+def test_gemini_1x_exclusion_from_default_listings():
+    """Regression test: Gemini 1.x models must NEVER appear in active default listings or rankings."""
+    active_models = registry.list_models(include_deprecated=False)
+    active_ids = {m.model_id for m in active_models}
+    assert "gemini-1.0-pro" not in active_ids
+    assert "gemini-1.5-pro" not in active_ids
+    assert "gemini-1.5-flash" not in active_ids
+
+    # Must be in historical catalogue marked as retired
+    historical = registry.list_historical_models()
+    hist_ids = {m.model_id for m in historical}
+    assert "gemini-1.0-pro" in hist_ids
+    assert "gemini-1.5-pro" in hist_ids
+    assert "gemini-1.5-flash" in hist_ids
+
+    assert registry.get_foundation_model("gemini-1.5-pro").lifecycle_status == LifecycleStatus.RETIRED
+    assert registry.is_model_eligible("gemini-1.5-pro") is False
+
+
+def test_preview_opt_in_behavior():
+    """Regression test: Preview models must be excluded by default and only included on explicit opt-in."""
+    # Default: preview models excluded
+    default_models = registry.list_models(include_deprecated=False, include_preview=False)
+    default_ids = {m.model_id for m in default_models}
+    assert "gemini-3.1-pro-preview" not in default_ids
+    assert registry.is_model_eligible("gemini-3.1-pro-preview", include_preview=False) is False
+
+    # Explicit opt-in: verified preview models become eligible
+    preview_models = registry.list_models(include_deprecated=False, include_preview=True)
+    preview_ids = {m.model_id for m in preview_models}
+    assert "gemini-3.1-pro-preview" in preview_ids
+    assert registry.is_model_eligible("gemini-3.1-pro-preview", include_preview=True) is True
+
+    # Unverified models with missing pricing remain ineligible even with include_preview=True
+    assert registry.is_model_eligible("gemini-2.5-pro", include_preview=True) is False
+    assert registry.is_model_eligible("grok-3", include_preview=True) is False
+
+
+def test_exact_model_ids_and_pricing_freshness():
+    """Regression test: All 22 active GA models have exact IDs, non-zero pricing, and valid audit dates."""
+    active_models = registry.list_active_models()
+    assert len(active_models) == 22
+    for m in active_models:
+        assert m.pricing.is_known is True
+        assert m.pricing.input_cost_per_m is not None and m.pricing.input_cost_per_m > 0
+        assert m.pricing.output_cost_per_m is not None and m.pricing.output_cost_per_m > 0
+        assert m.pricing.is_stale is False
+        assert m.context_window_tokens >= 64000
+        assert m.last_audit_date in ["2026-10-26", "2026-10-27"]
+        assert m.source_url.startswith("https://")
+
+
+def test_both_model_comparison_stages_and_deltas():
+    """Regression test: Compare prompt across original and optimized stages, verifying delta metrics."""
+    orig_prompt = "Write a basic Python function to upload user avatars to AWS S3."
+    opt_prompt = (
+        "Write a robust, production-ready Python function to upload user avatars to AWS S3. "
+        "Validate content types (PNG/JPEG only), enforce a 5MB size limit, generate secure UUID keys, "
+        "and handle botocore ClientError exceptions gracefully."
+    )
+
+    orig_report = comparison_engine.compare_prompt(orig_prompt, category=ProductCategory.FOUNDATION_MODEL)
+    opt_report = comparison_engine.compare_prompt(opt_prompt, category=ProductCategory.FOUNDATION_MODEL)
+
+    assert len(orig_report.ranked_models) == 22
+    assert len(opt_report.ranked_models) == 22
+
+    orig_top = orig_report.ranked_models[0]
+    opt_top = opt_report.ranked_models[0]
+
+    # Verify deltas can be computed properly
+    tok_delta = opt_top.token_count - orig_top.token_count
+    cost_delta = (opt_top.estimated_cost_usd or 0.0) - (orig_top.estimated_cost_usd or 0.0)
+    assert tok_delta > 0, "Optimized prompt must have higher token count due to guardrails"
+    assert cost_delta >= 0, "Optimized prompt cost delta must be non-negative"
 
 
 # ---------------------------------------------------------------------------
@@ -274,11 +395,11 @@ def test_tokenizer_adapters_accuracy_and_provenance():
         "and explain its asymptotic time complexity."
     )
 
-    openai_tok = get_tokenizer_adapter("gpt-4o")
-    gemini_tok = get_tokenizer_adapter("gemini-2.0-flash")
-    claude_tok = get_tokenizer_adapter("claude-3-7-sonnet")
-    grok_tok = get_tokenizer_adapter("grok-2")
-    deepseek_tok = get_tokenizer_adapter("deepseek-chat")
+    openai_tok = get_tokenizer_adapter("gpt-5.5")
+    gemini_tok = get_tokenizer_adapter("gemini-3.8-flash")
+    claude_tok = get_tokenizer_adapter("claude-sonnet-5-5")
+    grok_tok = get_tokenizer_adapter("grok-4-7")
+    deepseek_tok = get_tokenizer_adapter("deepseek-v4-pro")
 
     # OpenAI exact count via tiktoken
     res_openai = openai_tok.count_tokens(test_prompt)
@@ -330,7 +451,7 @@ def test_tokenizer_adapters_accuracy_and_provenance():
 # ---------------------------------------------------------------------------
 
 def test_cost_calculation_freshness_and_explicit_status():
-    m = registry.get_foundation_model("gpt-4o")
+    m = registry.get_foundation_model("gpt-5.5")
     assert m is not None
 
     cost = calculate_model_cost(model=m, input_tokens=1000, estimated_output_tokens=500)
@@ -339,7 +460,7 @@ def test_cost_calculation_freshness_and_explicit_status():
     assert cost.output_cost_usd is not None
     assert cost.total_estimated_cost_usd is not None
     assert cost.total_estimated_cost_usd > 0
-    assert cost.pricing_effective_date == "2024-10-01"
+    assert cost.pricing_effective_date == "2026-04-23"
 
     # Unpriced model handling
     unpriced = ModelMetadata(
@@ -374,13 +495,13 @@ def test_foundation_model_ranking_wsm_and_topsis():
 
     assert report_wsm.category == "foundation_model"
     assert report_wsm.ranking_method == "weighted_sum"
-    assert len(report_wsm.ranked_models) == 17
+    assert len(report_wsm.ranked_models) == 22
     assert all(r.lifecycle_status == "active" for r in report_wsm.ranked_models)
     assert all(r.score_type == "heuristic_recommendation_score" for r in report_wsm.ranked_models)
 
     # Strictly monotonic sequential ranks
     ranks_wsm = [r.rank for r in report_wsm.ranked_models]
-    assert ranks_wsm == list(range(1, 18))
+    assert ranks_wsm == list(range(1, 23))
 
     # Descending scores
     scores_wsm = [r.score for r in report_wsm.ranked_models]
@@ -397,7 +518,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
 
     assert report_topsis.ranking_method == "topsis"
     ranks_topsis = [r.rank for r in report_topsis.ranked_models]
-    assert ranks_topsis == list(range(1, 18))
+    assert ranks_topsis == list(range(1, 23))
 
     # 3. Cost-optimized preset favors affordable models
     report_cost = comparison_engine.compare_prompt(
@@ -406,7 +527,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
         preset=RankingPreset.COST_OPTIMIZED
     )
     top_cost_model = report_cost.ranked_models[0].model_id
-    assert top_cost_model in ["gemini-2.0-flash-lite", "gemini-1.5-flash", "deepseek-chat", "gpt-4o-mini", "gemini-2.0-flash"]
+    assert top_cost_model in ["gpt-6-luna", "claude-haiku-5-5", "deepseek-flash", "deepseek-chat", "gemini-3.5-flash-lite", "gpt-5-mini", "gemini-3.8-flash"]
 
     # 4. Quality-optimized preset favors frontier models
     report_quality = comparison_engine.compare_prompt(
@@ -415,7 +536,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
         preset=RankingPreset.QUALITY_OPTIMIZED
     )
     top_quality_model = report_quality.ranked_models[0].model_id
-    assert top_quality_model in ["claude-3-7-sonnet", "o1", "deepseek-reasoner", "o3-mini", "claude-3-5-sonnet", "gemini-1.5-pro"]
+    assert top_quality_model in ["deepseek-v4-pro", "gpt-6-astra", "claude-opus-5-5", "claude-sonnet-5-5", "gpt-5.5-pro", "gemini-4-argon", "gpt-5.5", "deepseek-reasoner"]
 
 
 # ---------------------------------------------------------------------------
@@ -571,28 +692,30 @@ def test_retired_models_excluded_from_ranking():
     report_default = comparison_engine.compare_prompt(
         prompt="Write a quicksort in C++",
         category=ProductCategory.FOUNDATION_MODEL,
-        model_ids=["gpt-4-turbo", "gemini-2.5-pro", "grok-3", "gpt-4o"],
+        model_ids=["gpt-4-turbo", "gemini-2.5-pro", "grok-3", "gpt-5.5", "gemini-1.5-pro"],
         include_deprecated=False
     )
     ranked_ids = [r.model_id for r in report_default.ranked_models]
-    assert "gpt-4o" in ranked_ids
+    assert "gpt-5.5" in ranked_ids
     assert "gpt-4-turbo" not in ranked_ids
     assert "gemini-2.5-pro" not in ranked_ids
     assert "grok-3" not in ranked_ids
+    assert "gemini-1.5-pro" not in ranked_ids
 
     # If user explicitly requests historical access (include_deprecated=True),
     # historical models can be evaluated
     report_historical = comparison_engine.compare_prompt(
         prompt="Write a quicksort in C++",
         category=ProductCategory.FOUNDATION_MODEL,
-        model_ids=["gpt-4-turbo", "gemini-2.5-pro", "grok-3", "gpt-4o"],
+        model_ids=["gpt-4-turbo", "gemini-2.5-pro", "grok-3", "gpt-5.5", "gemini-1.5-pro"],
         include_deprecated=True
     )
     hist_ranked_ids = [r.model_id for r in report_historical.ranked_models]
-    assert "gpt-4o" in hist_ranked_ids
+    assert "gpt-5.5" in hist_ranked_ids
     assert "gpt-4-turbo" in hist_ranked_ids
     assert "gemini-2.5-pro" in hist_ranked_ids
     assert "grok-3" in hist_ranked_ids
+    assert "gemini-1.5-pro" in hist_ranked_ids
 
 
 # ---------------------------------------------------------------------------
@@ -658,9 +781,9 @@ def test_strict_offline_zero_network_calls():
             method=RankingMethod.WEIGHTED_SUM,
             preset=RankingPreset.BALANCED
         )
-        assert len(report.ranked_models) == 17
+        assert len(report.ranked_models) == 22
         assert report.ranked_models[0].score > 0
-        assert report.model_details["gpt-4o"].token_count > 0
+        assert report.model_details["gpt-5.5"].token_count > 0
 
 
 # ---------------------------------------------------------------------------
@@ -672,10 +795,10 @@ def test_fastapi_models_endpoint_categories(client):
     res = client.get("/models")
     assert res.status_code == 200
     data = res.json()
-    assert len(data) == 17
+    assert len(data) == 22
     assert all(m["category"] == "foundation_model" for m in data)
     assert all(m["lifecycle_status"] == "active" for m in data)
-    assert all(m["last_audit_date"] == "2026-10-26" for m in data)
+    assert all(m["last_audit_date"] in ["2026-10-26", "2026-10-27"] for m in data)
 
     # 2. GET /models?category=ide_assistant returns 4 IDEs
     res_ide = client.get("/models?category=ide_assistant")
@@ -697,33 +820,38 @@ def test_fastapi_models_endpoint_categories(client):
 
 
 def test_fastapi_get_specific_items(client):
-    # Active foundation model
-    res_fm = client.get("/models/gpt-4o")
+    # Active foundation models
+    res_fm = client.get("/models/gpt-5.5")
     assert res_fm.status_code == 200
-    assert res_fm.json()["model_id"] == "gpt-4o"
+    assert res_fm.json()["model_id"] == "gpt-5.5"
     assert res_fm.json()["lifecycle_status"] == "active"
-    assert res_fm.json()["last_audit_date"] == "2026-10-26"
+    assert res_fm.json()["last_audit_date"] in ["2026-10-26", "2026-10-27"]
 
-    # Claude 3.7 Sonnet
-    res_claude = client.get("/models/claude-3-7-sonnet")
+    # Gemini 3.8 Flash
+    res_gem = client.get("/models/gemini-3.8-flash")
+    assert res_gem.status_code == 200
+    assert res_gem.json()["lifecycle_status"] == "active"
+
+    # Claude Sonnet 5.5
+    res_claude = client.get("/models/claude-sonnet-5-5")
     assert res_claude.status_code == 200
     assert res_claude.json()["lifecycle_status"] == "active"
 
-    # Gemini 2.0 Flash
-    res_gem = client.get("/models/gemini-2.0-flash")
-    assert res_gem.status_code == 200
-    assert res_gem.json()["lifecycle_status"] == "active"
+    # Preview foundation model
+    res_prev = client.get("/models/gemini-3.1-pro-preview")
+    assert res_prev.status_code == 200
+    assert res_prev.json()["lifecycle_status"] == "preview"
+
+    # Retired legacy model
+    res_ret = client.get("/models/gemini-1.5-pro")
+    assert res_ret.status_code == 200
+    assert res_ret.json()["lifecycle_status"] == "retired"
 
     # Unverified foundation model
     res_unv = client.get("/models/gemini-2.5-pro")
     assert res_unv.status_code == 200
     assert res_unv.json()["lifecycle_status"] == "unverified"
     assert "model_id" in res_unv.json()["unverified_fields"]
-
-    # Preview model
-    res_prev = client.get("/models/grok-3")
-    assert res_prev.status_code == 200
-    assert res_prev.json()["lifecycle_status"] == "preview"
 
     # Deprecated model
     res_dep = client.get("/models/gpt-4-turbo")
@@ -757,7 +885,7 @@ def test_fastapi_compare_models_endpoint_all_categories(client):
     assert res_fm.status_code == 200
     data_fm = res_fm.json()
     assert data_fm["category"] == "foundation_model"
-    assert len(data_fm["ranked_models"]) == 17
+    assert len(data_fm["ranked_models"]) == 22
     assert data_fm["ranked_products"] is None
     assert all(r["score_type"] == "heuristic_recommendation_score" for r in data_fm["ranked_models"])
     assert "token_count_method" in data_fm["ranked_models"][0]

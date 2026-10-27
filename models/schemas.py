@@ -82,6 +82,10 @@ class ModelComparisonRequest(BaseModel):
         default=False,
         description="Whether to include deprecated, retired, or discontinued items in comparison pool"
     )
+    include_preview: Optional[bool] = Field(
+        default=False,
+        description="Whether to include preview models in comparison pool"
+    )
 
     @field_validator("prompt")
     @classmethod

@@ -49,6 +49,7 @@ def list_models(
     category: Optional[str] = Query(None, description="Filter by category: 'foundation_model', 'ide_assistant', or 'app_builder' (default: foundation_model)"),
     provider: Optional[str] = Query(None, description="Filter by provider or vendor: openai, google, anthropic, xai, anysphere, codeium, vercel, etc."),
     include_deprecated: bool = Query(False, description="Whether to include deprecated or retired items (default: False)"),
+    include_preview: bool = Query(False, description="Whether to include preview models (default: False)"),
     status: Optional[str] = Query(None, description="Filter by specific lifecycle status or product availability")
 ):
     """
@@ -71,6 +72,7 @@ def list_models(
         models = registry.list_models(
             provider=provider,
             include_deprecated=include_deprecated,
+            include_preview=include_preview,
             lifecycle_status=lifecycle_enum
         )
 
@@ -285,7 +287,8 @@ def compare_models_endpoint(req: ModelComparisonRequest):
         custom_weights=req.custom_weights,
         model_ids=req.models,
         output_tokens_override=req.expected_output_tokens,
-        include_deprecated=bool(req.include_deprecated)
+        include_deprecated=bool(req.include_deprecated),
+        include_preview=bool(req.include_preview)
     )
 
     # 1. Format foundation model details if applicable

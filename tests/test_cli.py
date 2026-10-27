@@ -498,7 +498,7 @@ def test_cli_interactive_option_3_specific_model_selection(capsys):
         "Write unit tests for a payment processing module.",
         "END",
         "",  # Accept inferred task
-        "1, 2",  # Select first 2 models (gpt-4o, gpt-4o-mini)
+        "1, 2",  # Select first 2 models (gpt-5.5, gpt-5.5-pro)
         "1",  # WSM
         "1",  # Balanced
         "2",  # Return to menu
@@ -510,8 +510,8 @@ def test_cli_interactive_option_3_specific_model_selection(capsys):
         assert exc_info.value.code == 0
 
     out = capsys.readouterr().out
-    assert "gpt-4o" in out
-    assert "gpt-4o-mini" in out
+    assert "gpt-5.5" in out
+    assert "gpt-5.5-pro" in out
 
 
 def test_cli_interactive_option_4_ide_assistants(capsys):
@@ -570,7 +570,7 @@ def test_cli_interactive_option_6_inspect_catalogue(capsys):
     inputs = [
         "6",  # Choose Option 6
         "1",  # Foundation Models
-        "1",  # Inspect first model (gpt-4o)
+        "1",  # Inspect first model (gpt-5.5)
         "",   # Press Enter to return to model list
         "e",  # View excluded models
         "",   # Press Enter
@@ -594,7 +594,7 @@ def test_cli_interactive_option_6_inspect_catalogue(capsys):
     out = capsys.readouterr().out
     assert "INSPECT MODEL & PRODUCT CATALOGUE" in out
     assert "ACTIVE FOUNDATION MODELS" in out
-    assert "FOUNDATION MODEL INSPECTION: gpt-4o" in out
+    assert "FOUNDATION MODEL INSPECTION: gpt-5.5" in out
     assert "EXCLUDED / UNVERIFIED / PREVIEW / RETIRED MODELS" in out
     assert "IDE PRODUCT INSPECTION: cursor" in out
     assert "APP BUILDER INSPECTION: v0-dev" in out
@@ -903,7 +903,8 @@ def test_phase5_complete_workflow_single_model_selection(capsys):
         prompt,
         "END",
         "s",       # Customize models
-        "1",       # Select only model 1 (gpt-4o)
+        "n",       # Preview models [y/N]
+        "1",       # Select only model 1 (gpt-5.5)
         "1",       # WSM
         "1",       # Balanced
         "5",       # Return to menu

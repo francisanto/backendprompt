@@ -840,7 +840,8 @@ def cli_complete_end_to_end_workflow(colors: Colors, preloaded_prompt: Optional[
             print(f"{colors.BOLD}[STAGE 2/6] FOUNDATION MODEL COMPARISON (ORIGINAL PROMPT){colors.RESET}")
             print(f"{colors.BOLD}──────────────────────────────────────────────────────────────────────────────{colors.RESET}")
 
-            eligible_models = registry.list_models(include_deprecated=False)
+            include_preview = False
+            eligible_models = registry.list_models(include_deprecated=False, include_preview=False)
             print(f"Evaluating across {len(eligible_models)} active eligible foundation models.")
             print(f"Default comparison: Automatic comparison using Weighted Sum Model (WSM, balanced preset).")
 
@@ -854,9 +855,19 @@ def cli_complete_end_to_end_workflow(colors: Colors, preloaded_prompt: Optional[
                 return
 
             if choice_config == "s":
-                print(f"\n{colors.BOLD}Eligible Active Foundation Models:{colors.RESET}")
+                print(f"\nInclude preview models in evaluation? [y/N]")
+                try:
+                    prev_in = input(f"{colors.CYAN}Include preview models (y/n) [n]:{colors.RESET} ").strip().lower()
+                except (KeyboardInterrupt, EOFError):
+                    return
+                if prev_in in {"y", "yes"}:
+                    include_preview = True
+                    eligible_models = registry.list_models(include_deprecated=False, include_preview=True)
+
+                print(f"\n{colors.BOLD}Eligible Foundation Models ({len(eligible_models)} models):{colors.RESET}")
                 for idx, m in enumerate(eligible_models, 1):
-                    print(f"  [{idx:2d}] {m.model_id:<24} ({m.display_name}, {m.provider})")
+                    preview_tag = f" [{colors.YELLOW}PREVIEW{colors.RESET}]" if m.lifecycle_status.value == "preview" else ""
+                    print(f"  [{idx:2d}] {m.model_id:<24} ({m.display_name}, {m.provider}){preview_tag}")
                 try:
                     sel_in = input(f"\n{colors.CYAN}Enter comma-separated numbers or IDs (or [Enter] for all {len(eligible_models)}):{colors.RESET} ").strip()
                 except (KeyboardInterrupt, EOFError):
@@ -905,7 +916,8 @@ def cli_complete_end_to_end_workflow(colors: Colors, preloaded_prompt: Optional[
                 category=ProductCategory.FOUNDATION_MODEL,
                 method=method,
                 preset=preset,
-                model_ids=selected_ids
+                model_ids=selected_ids,
+                include_preview=include_preview
             )
 
             # Concise Table
@@ -1053,7 +1065,8 @@ def cli_complete_end_to_end_workflow(colors: Colors, preloaded_prompt: Optional[
                 category=ProductCategory.FOUNDATION_MODEL,
                 method=method,
                 preset=preset,
-                model_ids=selected_ids
+                model_ids=selected_ids,
+                include_preview=include_preview
             )
 
             opt_top = opt_report.ranked_models[0] if opt_report.ranked_models else None
@@ -1338,7 +1351,8 @@ def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str
         chosen_task = task_mapping.get(task_choice, inferred_task)
 
         # 2. Show Eligible Foundation Models
-        eligible = registry.list_models(include_deprecated=False)
+        include_preview = False
+        eligible = registry.list_models(include_deprecated=False, include_preview=False)
         print(f"\n{colors.BOLD}Eligible Active Foundation Models ({len(eligible)} models):{colors.RESET}")
         print("-" * 80)
         print(f" {'#':<3} {'Model ID':<22} {'Provider':<11} {'Context':<9} {'Pricing ($/1M in/out)':<24} {'Tokenizer'}")
@@ -1352,12 +1366,31 @@ def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str
 
         # 3. Model Selection
         try:
-            model_sel = input(f"{colors.CYAN}Select models [Enter for all {len(eligible)}, or comma-separated numbers/IDs, 'c' to cancel]:{colors.RESET} ").strip()
+            model_sel = input(f"{colors.CYAN}Select models [Enter for all {len(eligible)}, or comma-separated numbers/IDs, 'p' for preview, 'c' to cancel]:{colors.RESET} ").strip()
         except (KeyboardInterrupt, EOFError):
             return
 
         if model_sel.lower() in {"c", "cancel"}:
             return
+
+        if model_sel.lower() in {"p", "preview"}:
+            include_preview = True
+            eligible = registry.list_models(include_deprecated=False, include_preview=True)
+            print(f"\n{colors.BOLD}Eligible Foundation Models including Preview ({len(eligible)} models):{colors.RESET}")
+            print("-" * 80)
+            print(f" {'#':<3} {'Model ID':<24} {'Provider':<11} {'Context':<9} {'Pricing ($/1M in/out)':<24} {'Status'}")
+            print("-" * 80)
+            for idx, m in enumerate(eligible, 1):
+                ctx_str = f"{m.context_window_tokens // 1000}K" if m.context_window_tokens < 1_000_000 else f"{m.context_window_tokens // 1_000_000}M"
+                pricing_str = f"${m.pricing.input_cost_per_m:.2f} / ${m.pricing.output_cost_per_m:.2f}" if m.pricing.input_cost_per_m is not None else "UNVERIFIED"
+                print(f" {idx:<3} {m.model_id:<24} {m.provider:<11} {ctx_str:<9} {pricing_str:<24} {m.lifecycle_status.value.upper()}")
+            print("-" * 80)
+            try:
+                model_sel = input(f"{colors.CYAN}Select models [Enter for all {len(eligible)}, or comma-separated numbers/IDs, 'c' to cancel]:{colors.RESET} ").strip()
+            except (KeyboardInterrupt, EOFError):
+                return
+            if model_sel.lower() in {"c", "cancel"}:
+                return
 
         selected_ids: Optional[List[str]] = None
         if model_sel:
@@ -1410,7 +1443,8 @@ def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str
             category=ProductCategory.FOUNDATION_MODEL,
             method=method,
             preset=preset,
-            model_ids=selected_ids
+            model_ids=selected_ids,
+            include_preview=include_preview
         )
 
         # 7. Display Results Table
@@ -1444,11 +1478,13 @@ def cli_compare_foundation_models(colors: Colors, preloaded_prompt: Optional[str
         # 9. Excluded Models Explanation
         print("\n" + "-" * 80)
         print(f"{colors.BOLD}EXCLUDED MODELS & MISSING DATA POLICY:{colors.RESET}")
-        print("  • gemini-2.5-pro, gemini-2.5-flash: UNVERIFIED future releases (missing public pricing, ID, context).")
-        print("  • grok-3, grok-3-mini:              PREVIEW status (missing production API endpoint, public pricing).")
-        print("  • gpt-4-turbo:                      DEPRECATED (superseded by gpt-4o).")
-        print("  • gpt-3.5-turbo, gemini-1.0-pro:    RETIRED legacy models.")
-        print("  Policy: Default rankings strictly exclude unverified, preview, and legacy models.")
+        print("  • Gemini 1.x models (1.0-pro, 1.5-pro, 1.5-flash): RETIRED legacy models (removed from active pool).")
+        print("  • gemini-3.1-pro-preview:                           PREVIEW status (excluded by default unless preview enabled).")
+        print("  • gemini-2.5-pro, gemini-2.5-flash:                UNVERIFIED future releases (missing public pricing, ID, context).")
+        print("  • grok-3, grok-3-mini:                             PREVIEW status (missing production API endpoint, public pricing).")
+        print("  • gpt-4o, gpt-4o-mini, o1, claude-3-7-sonnet:      HISTORICAL legacy models (superseded by modern GPT-5.x/6 and Claude 5.5).")
+        print("  • gpt-4-turbo, gpt-3.5-turbo:                      RETIRED legacy models.")
+        print("  Policy: Default rankings strictly exclude unverified, preview, and retired models.")
         print("          Missing prices receive maximum cost penalty and are never treated as free.")
         print("=" * 80)
 
@@ -1632,7 +1668,7 @@ def cli_inspect_catalogue(colors: Colors) -> None:
         print("=" * 80)
 
         print("Select category to inspect:")
-        print("  [1] Foundation Models (17 active GA, 7 unverified/preview/legacy)")
+        print("  [1] Foundation Models (22 active GA, 6 preview/unverified, 18 historical/retired)")
         print("  [2] IDE Coding Assistants (4 verified products)")
         print("  [3] AI App Builders (4 verified platforms)")
         print("  [0] Back to Main Menu")
@@ -1649,9 +1685,10 @@ def cli_inspect_catalogue(colors: Colors) -> None:
         # Category 1: Foundation Models
         # -------------------------------------------------------------------
         if choice == "1":
-            all_models = list(registry._models.values())
-            active_models = [m for m in all_models if m.lifecycle_status == LifecycleStatus.ACTIVE]
-            excluded_models = [m for m in all_models if m.lifecycle_status != LifecycleStatus.ACTIVE]
+            active_models = registry.list_active_models()
+            preview_models = registry.list_preview_models()
+            historical_models = registry.list_historical_models()
+            excluded_models = preview_models + historical_models
 
             while True:
                 print("\n" + "-" * 80)
@@ -1665,6 +1702,7 @@ def cli_inspect_catalogue(colors: Colors) -> None:
                     print(f" {idx:<3} {m.model_id:<22} {m.provider:<10} {ctx_str:<9} {p_str:<24} {m.lifecycle_status.value.upper()}")
                 print("-" * 80)
                 print(f"• Enter model # (1-{len(active_models)}) or exact Model ID to inspect full metadata")
+                print("• Type 'p' or 'preview' to view preview models")
                 print("• Type 'e' or 'excluded' to view unverified, preview, and legacy models")
                 print("• Type '0' or 'back' to return to category selection")
 
@@ -1675,6 +1713,23 @@ def cli_inspect_catalogue(colors: Colors) -> None:
 
                 if sub in {"0", "back", "b"}:
                     break
+
+                if sub.lower() in {"p", "preview"}:
+                    print("\n" + "-" * 80)
+                    print(f"{colors.BOLD}PREVIEW FOUNDATION MODELS ({len(preview_models)} models - opt-in required):{colors.RESET}")
+                    print("-" * 80)
+                    for pm in preview_models:
+                        print(f"  • {colors.BOLD}{pm.model_id:<26}{colors.RESET} [{pm.lifecycle_status.value.upper()}] Provider: {pm.provider}")
+                        if pm.pricing.input_cost_per_m is not None:
+                            print(f"      Verified pricing: ${pm.pricing.input_cost_per_m:.2f} in / ${pm.pricing.output_cost_per_m:.2f} out per 1M")
+                        if pm.unverified_fields:
+                            print(f"      Unverified critical fields: {', '.join(pm.unverified_fields)}")
+                    print("-" * 80)
+                    try:
+                        input(f"{colors.CYAN}Press [Enter] to continue...{colors.RESET}")
+                    except (KeyboardInterrupt, EOFError):
+                        pass
+                    continue
 
                 if sub.lower() in {"e", "excluded"}:
                     print("\n" + "-" * 80)
