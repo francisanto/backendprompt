@@ -80,7 +80,7 @@ def client():
 def test_model_registry_coverage_and_lifecycle():
     # 1. Default recommendation pool excludes deprecated, retired, preview, and unverified models
     active_models = registry.list_models(include_deprecated=False)
-    assert len(active_models) == 22, f"Expected exactly 22 active models, found {len(active_models)}"
+    assert len(active_models) == 21, f"Expected exactly 21 active models, found {len(active_models)}"
     assert all(m.lifecycle_status == LifecycleStatus.ACTIVE for m in active_models)
     assert all(registry.is_model_eligible(m.model_id) for m in active_models)
 
@@ -104,20 +104,19 @@ def test_model_registry_coverage_and_lifecycle():
     assert "gemini-3.5-flash" in active_ids
     assert "gemini-3.5-flash-lite" in active_ids
 
-    # Anthropic (3 modern verified models)
+    # Anthropic (4 modern verified models)
+    assert "claude-fable-5-1" in active_ids
     assert "claude-opus-5-5" in active_ids
     assert "claude-sonnet-5-5" in active_ids
     assert "claude-haiku-5-5" in active_ids
 
     # xAI (2 modern verified models)
-    assert "grok-4-7" in active_ids
-    assert "grok-4-3" in active_ids
+    assert "grok-4.7" in active_ids
+    assert "grok-4.3" in active_ids
 
-    # DeepSeek (4 modern verified models)
+    # DeepSeek (2 modern verified models)
     assert "deepseek-v4-pro" in active_ids
     assert "deepseek-flash" in active_ids
-    assert "deepseek-reasoner" in active_ids
-    assert "deepseek-chat" in active_ids
 
     # Crucial negative tests: Gemini 1.x models MUST NOT be active
     assert "gemini-1.0-pro" not in active_ids
@@ -125,6 +124,8 @@ def test_model_registry_coverage_and_lifecycle():
     assert "gemini-1.5-flash" not in active_ids
 
     # Retired legacy models MUST NOT be active
+    assert "deepseek-reasoner" not in active_ids
+    assert "deepseek-chat" not in active_ids
     assert "gpt-4o" not in active_ids
     assert "gpt-4o-mini" not in active_ids
     assert "o1" not in active_ids
@@ -166,15 +167,14 @@ def test_audit_target_models_lifecycle_and_provenance():
         ("gemini-3.6-flash", 1_048_576, 0.75, 3.75),
         ("gemini-3.5-flash", 1_048_576, 1.50, 9.00),
         ("gemini-3.5-flash-lite", 1_048_576, 0.30, 2.50),
+        ("claude-fable-5-1", 1_000_000, 10.00, 50.00),
         ("claude-opus-5-5", 1_000_000, 4.00, 20.00),
-        ("claude-sonnet-5-5", 1_000_000, 3.00, 15.00),
+        ("claude-sonnet-5-5", 1_000_000, 2.00, 10.00),
         ("claude-haiku-5-5", 1_000_000, 0.10, 0.50),
-        ("grok-4-7", 500_000, 2.00, 6.00),
-        ("grok-4-3", 1_000_000, 1.25, 2.50),
+        ("grok-4.7", 500_000, 2.00, 6.00),
+        ("grok-4.3", 1_000_000, 1.25, 2.50),
         ("deepseek-v4-pro", 1_000_000, 0.66, 1.98),
         ("deepseek-flash", 1_000_000, 0.15, 0.60),
-        ("deepseek-reasoner", 64_000, 0.55, 2.19),
-        ("deepseek-chat", 64_000, 0.14, 0.28),
     ]
 
     for model_id, expected_ctx, exp_in_cost, exp_out_cost in ga_targets:
@@ -195,6 +195,8 @@ def test_audit_target_models_lifecycle_and_provenance():
         ("gemini-2.5-flash", LifecycleStatus.UNVERIFIED),
         ("grok-3", LifecycleStatus.PREVIEW),
         ("grok-3-mini", LifecycleStatus.PREVIEW),
+        ("deepseek-chat", LifecycleStatus.RETIRED),
+        ("deepseek-reasoner", LifecycleStatus.RETIRED),
         ("gemini-1.5-pro", LifecycleStatus.RETIRED),
         ("gemini-1.5-flash", LifecycleStatus.RETIRED),
         ("gemini-1.0-pro", LifecycleStatus.RETIRED),
@@ -253,16 +255,16 @@ def test_preview_opt_in_behavior():
 
 
 def test_exact_model_ids_and_pricing_freshness():
-    """Regression test: All 22 active GA models have exact IDs, non-zero pricing, and valid audit dates."""
+    """Regression test: All 21 active GA models have exact IDs, non-zero pricing, and valid audit dates."""
     active_models = registry.list_active_models()
-    assert len(active_models) == 22
+    assert len(active_models) == 21
     for m in active_models:
         assert m.pricing.is_known is True
         assert m.pricing.input_cost_per_m is not None and m.pricing.input_cost_per_m > 0
         assert m.pricing.output_cost_per_m is not None and m.pricing.output_cost_per_m > 0
         assert m.pricing.is_stale is False
         assert m.context_window_tokens >= 64000
-        assert m.last_audit_date in ["2026-10-26", "2026-10-27"]
+        assert m.last_audit_date in ["2026-10-26", "2026-10-27", "2026-10-28"]
         assert m.source_url.startswith("https://")
 
 
@@ -278,8 +280,8 @@ def test_both_model_comparison_stages_and_deltas():
     orig_report = comparison_engine.compare_prompt(orig_prompt, category=ProductCategory.FOUNDATION_MODEL)
     opt_report = comparison_engine.compare_prompt(opt_prompt, category=ProductCategory.FOUNDATION_MODEL)
 
-    assert len(orig_report.ranked_models) == 22
-    assert len(opt_report.ranked_models) == 22
+    assert len(orig_report.ranked_models) == 21
+    assert len(opt_report.ranked_models) == 21
 
     orig_top = orig_report.ranked_models[0]
     opt_top = opt_report.ranked_models[0]
@@ -398,7 +400,7 @@ def test_tokenizer_adapters_accuracy_and_provenance():
     openai_tok = get_tokenizer_adapter("gpt-5.5")
     gemini_tok = get_tokenizer_adapter("gemini-3.8-flash")
     claude_tok = get_tokenizer_adapter("claude-sonnet-5-5")
-    grok_tok = get_tokenizer_adapter("grok-4-7")
+    grok_tok = get_tokenizer_adapter("grok-4.7")
     deepseek_tok = get_tokenizer_adapter("deepseek-v4-pro")
 
     # OpenAI exact count via tiktoken
@@ -495,13 +497,13 @@ def test_foundation_model_ranking_wsm_and_topsis():
 
     assert report_wsm.category == "foundation_model"
     assert report_wsm.ranking_method == "weighted_sum"
-    assert len(report_wsm.ranked_models) == 22
+    assert len(report_wsm.ranked_models) == 21
     assert all(r.lifecycle_status == "active" for r in report_wsm.ranked_models)
     assert all(r.score_type == "heuristic_recommendation_score" for r in report_wsm.ranked_models)
 
     # Strictly monotonic sequential ranks
     ranks_wsm = [r.rank for r in report_wsm.ranked_models]
-    assert ranks_wsm == list(range(1, 23))
+    assert ranks_wsm == list(range(1, 22))
 
     # Descending scores
     scores_wsm = [r.score for r in report_wsm.ranked_models]
@@ -518,7 +520,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
 
     assert report_topsis.ranking_method == "topsis"
     ranks_topsis = [r.rank for r in report_topsis.ranked_models]
-    assert ranks_topsis == list(range(1, 23))
+    assert ranks_topsis == list(range(1, 22))
 
     # 3. Cost-optimized preset favors affordable models
     report_cost = comparison_engine.compare_prompt(
@@ -527,7 +529,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
         preset=RankingPreset.COST_OPTIMIZED
     )
     top_cost_model = report_cost.ranked_models[0].model_id
-    assert top_cost_model in ["gpt-6-luna", "claude-haiku-5-5", "deepseek-flash", "deepseek-chat", "gemini-3.5-flash-lite", "gpt-5-mini", "gemini-3.8-flash"]
+    assert top_cost_model in ["gpt-6-luna", "claude-haiku-5-5", "deepseek-flash", "gemini-3.5-flash-lite", "gpt-5-mini", "gemini-3.8-flash"]
 
     # 4. Quality-optimized preset favors frontier models
     report_quality = comparison_engine.compare_prompt(
@@ -536,7 +538,7 @@ def test_foundation_model_ranking_wsm_and_topsis():
         preset=RankingPreset.QUALITY_OPTIMIZED
     )
     top_quality_model = report_quality.ranked_models[0].model_id
-    assert top_quality_model in ["deepseek-v4-pro", "gpt-6-astra", "claude-opus-5-5", "claude-sonnet-5-5", "gpt-5.5-pro", "gemini-4-argon", "gpt-5.5", "deepseek-reasoner"]
+    assert top_quality_model in ["deepseek-v4-pro", "gpt-6-astra", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "gpt-5.5-pro", "gemini-4-argon", "gpt-5.5"]
 
 
 # ---------------------------------------------------------------------------
@@ -781,7 +783,7 @@ def test_strict_offline_zero_network_calls():
             method=RankingMethod.WEIGHTED_SUM,
             preset=RankingPreset.BALANCED
         )
-        assert len(report.ranked_models) == 22
+        assert len(report.ranked_models) == 21
         assert report.ranked_models[0].score > 0
         assert report.model_details["gpt-5.5"].token_count > 0
 
@@ -795,10 +797,10 @@ def test_fastapi_models_endpoint_categories(client):
     res = client.get("/models")
     assert res.status_code == 200
     data = res.json()
-    assert len(data) == 22
+    assert len(data) == 21
     assert all(m["category"] == "foundation_model" for m in data)
     assert all(m["lifecycle_status"] == "active" for m in data)
-    assert all(m["last_audit_date"] in ["2026-10-26", "2026-10-27"] for m in data)
+    assert all(m["last_audit_date"] in ["2026-10-26", "2026-10-27", "2026-10-28"] for m in data)
 
     # 2. GET /models?category=ide_assistant returns 4 IDEs
     res_ide = client.get("/models?category=ide_assistant")
@@ -825,7 +827,7 @@ def test_fastapi_get_specific_items(client):
     assert res_fm.status_code == 200
     assert res_fm.json()["model_id"] == "gpt-5.5"
     assert res_fm.json()["lifecycle_status"] == "active"
-    assert res_fm.json()["last_audit_date"] in ["2026-10-26", "2026-10-27"]
+    assert res_fm.json()["last_audit_date"] in ["2026-10-26", "2026-10-27", "2026-10-28"]
 
     # Gemini 3.8 Flash
     res_gem = client.get("/models/gemini-3.8-flash")
@@ -836,11 +838,27 @@ def test_fastapi_get_specific_items(client):
     res_claude = client.get("/models/claude-sonnet-5-5")
     assert res_claude.status_code == 200
     assert res_claude.json()["lifecycle_status"] == "active"
+    assert res_claude.json()["input_cost_per_m"] == 2.00
+    assert res_claude.json()["output_cost_per_m"] == 10.00
+
+    # xAI Grok 4.7 canonical and alias
+    res_grok = client.get("/models/grok-4.7")
+    assert res_grok.status_code == 200
+    assert res_grok.json()["model_id"] == "grok-4.7"
+
+    res_grok_alias = client.get("/models/grok-4-7")
+    assert res_grok_alias.status_code == 200
+    assert res_grok_alias.json()["model_id"] == "grok-4.7"
 
     # Preview foundation model
     res_prev = client.get("/models/gemini-3.1-pro-preview")
     assert res_prev.status_code == 200
     assert res_prev.json()["lifecycle_status"] == "preview"
+
+    # Preview alias resolution
+    res_prev_alias = client.get("/models/gemini-3.1-pro")
+    assert res_prev_alias.status_code == 200
+    assert res_prev_alias.json()["model_id"] == "gemini-3.1-pro-preview"
 
     # Retired legacy model
     res_ret = client.get("/models/gemini-1.5-pro")
@@ -885,7 +903,7 @@ def test_fastapi_compare_models_endpoint_all_categories(client):
     assert res_fm.status_code == 200
     data_fm = res_fm.json()
     assert data_fm["category"] == "foundation_model"
-    assert len(data_fm["ranked_models"]) == 22
+    assert len(data_fm["ranked_models"]) == 21
     assert data_fm["ranked_products"] is None
     assert all(r["score_type"] == "heuristic_recommendation_score" for r in data_fm["ranked_models"])
     assert "token_count_method" in data_fm["ranked_models"][0]
@@ -925,3 +943,94 @@ def test_fastapi_compare_models_endpoint_all_categories(client):
     # 4. Unsupported category returns 422 (Pydantic validation error)
     res_bad_cat = client.post("/compare-models", json={"prompt": "Test", "category": "invalid_cat"})
     assert res_bad_cat.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 16. Phase 8 Catalogue Integrity & Canonical Aliases Tests
+# ---------------------------------------------------------------------------
+
+def test_phase8_model_catalogue_integrity_and_aliases():
+    """
+    Phase 8 Catalogue Audit & Integrity:
+    1. Verifies exact canonical public identifiers from official docs (e.g. grok-4.7, grok-4.3).
+    2. Verifies alias resolution for hyphenated legacy IDs (grok-4-7 -> grok-4.7).
+    3. Verifies canonical preview identifier (gemini-3.1-pro-preview) and alias resolution (gemini-3.1-pro).
+    4. Verifies duplicate gemini-3.1-pro is removed from PREVIEW_MODELS dictionary keys.
+    5. Verifies verified Claude Sonnet 5.5 pricing at $2.00/$10.00.
+    6. Verifies verified Claude Fable 5.1 presence in active GA pool.
+    7. Verifies official retirement of deepseek-chat and deepseek-reasoner on 2026-07-24.
+    8. Verifies maximum output token limits (128k Claude, 384k DeepSeek).
+    9. Verifies zero unverified fields in the default active recommendation pool.
+    """
+    # 1. Canonical xAI IDs
+    active_models = registry.list_active_models()
+    active_ids = {m.model_id for m in active_models}
+    assert "grok-4.7" in active_ids
+    assert "grok-4.3" in active_ids
+    assert "grok-4-7" not in active_ids
+    assert "grok-4-3" not in active_ids
+
+    # 2. Alias resolution
+    m_grok = registry.get_foundation_model("grok-4-7")
+    assert m_grok is not None
+    assert m_grok.model_id == "grok-4.7"
+
+    m_grok_43 = registry.get_foundation_model("grok-4-3")
+    assert m_grok_43 is not None
+    assert m_grok_43.model_id == "grok-4.3"
+
+    # 3. Preview canonical ID and alias resolution
+    m_gemini_prev = registry.get_foundation_model("gemini-3.1-pro")
+    assert m_gemini_prev is not None
+    assert m_gemini_prev.model_id == "gemini-3.1-pro-preview"
+    assert m_gemini_prev.lifecycle_status == LifecycleStatus.PREVIEW
+
+    # 4. Duplicate removal from PREVIEW_MODELS
+    from analyzers.model_comparison.registry import PREVIEW_MODELS
+    assert "gemini-3.1-pro-preview" in PREVIEW_MODELS
+    assert "gemini-3.1-pro" not in PREVIEW_MODELS
+
+    # 5. Claude Sonnet 5.5 verified pricing
+    sonnet = registry.get_foundation_model("claude-sonnet-5-5")
+    assert sonnet.pricing.input_cost_per_m == 2.00
+    assert sonnet.pricing.output_cost_per_m == 10.00
+    assert sonnet.max_output_tokens == 128_000
+
+    # 6. Claude Fable 5.1 verified active model
+    fable = registry.get_foundation_model("claude-fable-5-1")
+    assert fable is not None
+    assert fable.lifecycle_status == LifecycleStatus.ACTIVE
+    assert fable.pricing.input_cost_per_m == 10.00
+    assert fable.pricing.output_cost_per_m == 50.00
+    assert fable.context_window_tokens == 1_000_000
+    assert fable.max_output_tokens == 128_000
+
+    # 7. DeepSeek retired models
+    ds_chat = registry.get_foundation_model("deepseek-chat")
+    assert ds_chat.lifecycle_status == LifecycleStatus.RETIRED
+    assert ds_chat.retirement_date == "2026-07-24"
+    assert ds_chat.replacement_model_id == "deepseek-flash"
+    assert registry.is_model_eligible("deepseek-chat") is False
+
+    ds_r1 = registry.get_foundation_model("deepseek-reasoner")
+    assert ds_r1.lifecycle_status == LifecycleStatus.RETIRED
+    assert ds_r1.retirement_date == "2026-07-24"
+    assert ds_r1.replacement_model_id == "deepseek-v4-pro"
+    assert registry.is_model_eligible("deepseek-reasoner") is False
+
+    # 8. Output token limits
+    opus = registry.get_foundation_model("claude-opus-5-5")
+    assert opus.max_output_tokens == 128_000
+    dsv4 = registry.get_foundation_model("deepseek-v4-pro")
+    assert dsv4.max_output_tokens == 384_000
+
+    # 9. Default recommendation pool integrity: strictly 21 active models, 0 unverified critical fields
+    default_pool = registry.list_models(include_deprecated=False, include_preview=False)
+    assert len(default_pool) == 21
+    for m in default_pool:
+        assert m.lifecycle_status == LifecycleStatus.ACTIVE
+        assert not m.unverified_fields, f"Active model {m.model_id} has unverified fields: {m.unverified_fields}"
+        assert m.pricing.is_known is True
+        assert m.pricing.is_stale is False
+        assert m.pricing.input_cost_per_m is not None and m.pricing.input_cost_per_m > 0
+        assert m.pricing.output_cost_per_m is not None and m.pricing.output_cost_per_m > 0

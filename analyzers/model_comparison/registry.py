@@ -466,18 +466,41 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
     # Source: https://docs.anthropic.com/en/docs/about-claude/models
     # Pricing: https://www.anthropic.com/pricing
     # -----------------------------------------------------------------------
+    "claude-fable-5-1": ModelMetadata(
+        model_id="claude-fable-5-1",
+        display_name="Anthropic Claude Fable 5.1",
+        provider="anthropic",
+        family="claude-5",
+        context_window_tokens=1_000_000,
+        max_output_tokens=128_000,
+        pricing=ModelPricing(
+            input_cost_per_m=10.00,
+            output_cost_per_m=50.00,
+            pricing_effective_date="2026-09-15",
+            pricing_verification_date="2026-10-28",
+            source_url="https://www.anthropic.com/pricing"
+        ),
+        tokenizer_name="claude_calibrated_heuristic",
+        capabilities=["complex_reasoning", "agentic_coding", "creative_and_writing", "long_context"],
+        strengths=["Ultra-deep reasoning", "Narrative and creative synthesis", "Large-scale codebase architectural planning"],
+        description="Anthropic's premier creative and deep architectural reasoning foundation model with 1M context.",
+        lifecycle_status=LifecycleStatus.ACTIVE,
+        source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-fable-5-1",
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
+    ),
     "claude-opus-5-5": ModelMetadata(
         model_id="claude-opus-5-5",
         display_name="Anthropic Claude Opus 5.5",
         provider="anthropic",
         family="claude-5.5",
         context_window_tokens=1_000_000,
-        max_output_tokens=64_000,
+        max_output_tokens=128_000,
         pricing=ModelPricing(
             input_cost_per_m=4.00,
             output_cost_per_m=20.00,
             pricing_effective_date="2026-08-15",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://www.anthropic.com/pricing"
         ),
         tokenizer_name="claude_calibrated_heuristic",
@@ -486,8 +509,8 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         description="Anthropic's flagship intelligence model engineered for demanding agentic coding and knowledge work.",
         lifecycle_status=LifecycleStatus.ACTIVE,
         source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-opus-5-5",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
     "claude-sonnet-5-5": ModelMetadata(
         model_id="claude-sonnet-5-5",
@@ -495,12 +518,12 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         provider="anthropic",
         family="claude-5.5",
         context_window_tokens=1_000_000,
-        max_output_tokens=64_000,
+        max_output_tokens=128_000,
         pricing=ModelPricing(
-            input_cost_per_m=3.00,
-            output_cost_per_m=15.00,
+            input_cost_per_m=2.00,
+            output_cost_per_m=10.00,
             pricing_effective_date="2026-08-15",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://www.anthropic.com/pricing"
         ),
         tokenizer_name="claude_calibrated_heuristic",
@@ -509,8 +532,8 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         description="Anthropic's premier developer and agent model balancing speed, intelligence, and 1M context.",
         lifecycle_status=LifecycleStatus.ACTIVE,
         source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-sonnet-5-5",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
     "claude-haiku-5-5": ModelMetadata(
         model_id="claude-haiku-5-5",
@@ -518,12 +541,12 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         provider="anthropic",
         family="claude-5.5",
         context_window_tokens=1_000_000,
-        max_output_tokens=8_192,
+        max_output_tokens=128_000,
         pricing=ModelPricing(
             input_cost_per_m=0.10,
             output_cost_per_m=0.50,
             pricing_effective_date="2026-08-15",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://www.anthropic.com/pricing"
         ),
         tokenizer_name="claude_calibrated_heuristic",
@@ -532,16 +555,16 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         description="Anthropic's lightweight, low-latency model engineered for high-volume and responsive tasks.",
         lifecycle_status=LifecycleStatus.ACTIVE,
         source_url="https://docs.anthropic.com/en/docs/about-claude/models#claude-haiku-5-5",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
 
     # -----------------------------------------------------------------------
     # xAI Grok Active GA Models (Current Generation)
     # Source: https://docs.x.ai/
     # -----------------------------------------------------------------------
-    "grok-4-7": ModelMetadata(
-        model_id="grok-4-7",
+    "grok-4.7": ModelMetadata(
+        model_id="grok-4.7",
         display_name="xAI Grok 4.7",
         provider="xai",
         family="grok-4",
@@ -551,7 +574,7 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
             input_cost_per_m=2.00,
             output_cost_per_m=6.00,
             pricing_effective_date="2026-08-01",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://docs.x.ai/"
         ),
         tokenizer_name="grok_calibrated_heuristic",
@@ -559,12 +582,12 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         strengths=["Flagship frontier reasoning", "Fast token throughput", "500K context window"],
         description="xAI's flagship text generation and reasoning model with 500K context capacity.",
         lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.x.ai/docs/models#grok-4-7",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        source_url="https://docs.x.ai/docs/models#grok-4.7",
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
-    "grok-4-3": ModelMetadata(
-        model_id="grok-4-3",
+    "grok-4.3": ModelMetadata(
+        model_id="grok-4.3",
         display_name="xAI Grok 4.3",
         provider="xai",
         family="grok-4",
@@ -574,7 +597,7 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
             input_cost_per_m=1.25,
             output_cost_per_m=2.50,
             pricing_effective_date="2026-08-01",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://docs.x.ai/"
         ),
         tokenizer_name="grok_calibrated_heuristic",
@@ -582,9 +605,9 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         strengths=["1M token context capacity", "Cost-effective high-throughput", "Fast response latency"],
         description="Fast, cost-efficient 1M context model from xAI for general instruction and code execution.",
         lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://docs.x.ai/docs/models#grok-4-3",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        source_url="https://docs.x.ai/docs/models#grok-4.3",
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
 
     # -----------------------------------------------------------------------
@@ -597,12 +620,12 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         provider="deepseek",
         family="deepseek-v4",
         context_window_tokens=1_000_000,
-        max_output_tokens=16_000,
+        max_output_tokens=384_000,
         pricing=ModelPricing(
             input_cost_per_m=0.66,
             output_cost_per_m=1.98,
             pricing_effective_date="2026-09-01",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://api-docs.deepseek.com/quick_start/pricing"
         ),
         tokenizer_name="deepseek_calibrated_heuristic",
@@ -611,8 +634,8 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         description="DeepSeek's flagship open-weights Mixture-of-Experts model for advanced coding and reasoning.",
         lifecycle_status=LifecycleStatus.ACTIVE,
         source_url="https://api-docs.deepseek.com/quick_start/pricing",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     ),
     "deepseek-flash": ModelMetadata(
         model_id="deepseek-flash",
@@ -620,12 +643,12 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         provider="deepseek",
         family="deepseek-v4",
         context_window_tokens=1_000_000,
-        max_output_tokens=16_000,
+        max_output_tokens=384_000,
         pricing=ModelPricing(
             input_cost_per_m=0.15,
             output_cost_per_m=0.60,
             pricing_effective_date="2026-09-01",
-            pricing_verification_date="2026-10-27",
+            pricing_verification_date="2026-10-28",
             source_url="https://api-docs.deepseek.com/quick_start/pricing"
         ),
         tokenizer_name="deepseek_calibrated_heuristic",
@@ -634,54 +657,8 @@ ACTIVE_MODELS: Dict[str, ModelMetadata] = {
         description="High-speed, economical DeepSeek tier for high-volume text and code execution.",
         lifecycle_status=LifecycleStatus.ACTIVE,
         source_url="https://api-docs.deepseek.com/quick_start/pricing",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
-    ),
-    "deepseek-reasoner": ModelMetadata(
-        model_id="deepseek-reasoner",
-        display_name="DeepSeek-R1",
-        provider="deepseek",
-        family="deepseek-r1",
-        context_window_tokens=64_000,
-        max_output_tokens=8_000,
-        pricing=ModelPricing(
-            input_cost_per_m=0.55,
-            output_cost_per_m=2.19,
-            pricing_effective_date="2025-01-20",
-            pricing_verification_date="2026-10-27",
-            source_url="https://api-docs.deepseek.com/quick_start/pricing"
-        ),
-        tokenizer_name="deepseek_calibrated_heuristic",
-        capabilities=["complex_reasoning", "stem_reasoning", "code_generation", "security_analysis"],
-        strengths=["Open-weights reinforcement learning reasoning", "Competitive with OpenAI o1 on math and coding", "Affordable reasoning API"],
-        description="DeepSeek's frontier reasoning model trained via large-scale reinforcement learning for complex STEM tasks.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://api-docs.deepseek.com/quick_start/pricing",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
-    ),
-    "deepseek-chat": ModelMetadata(
-        model_id="deepseek-chat",
-        display_name="DeepSeek-V3",
-        provider="deepseek",
-        family="deepseek-v3",
-        context_window_tokens=64_000,
-        max_output_tokens=8_000,
-        pricing=ModelPricing(
-            input_cost_per_m=0.14,
-            output_cost_per_m=0.28,
-            pricing_effective_date="2024-12-26",
-            pricing_verification_date="2026-10-27",
-            source_url="https://api-docs.deepseek.com/quick_start/pricing"
-        ),
-        tokenizer_name="deepseek_calibrated_heuristic",
-        capabilities=["code_generation", "general_instruction", "data_analysis", "structured_output"],
-        strengths=["Extremely low token cost", "Top-tier code and language benchmarks", "Efficient MoE architecture"],
-        description="DeepSeek's 671B Mixture-of-Experts foundation model delivering frontier performance at high economy.",
-        lifecycle_status=LifecycleStatus.ACTIVE,
-        source_url="https://api-docs.deepseek.com/quick_start/pricing",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        verification_date="2026-10-28",
+        last_audit_date="2026-10-28"
     )
 }
 
@@ -712,30 +689,7 @@ PREVIEW_MODELS: Dict[str, ModelMetadata] = {
         lifecycle_status=LifecycleStatus.PREVIEW,
         source_url="https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro",
         verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
-    ),
-    "gemini-3.1-pro": ModelMetadata(
-        model_id="gemini-3.1-pro",
-        display_name="Google Gemini 3.1 Pro (Preview)",
-        provider="google",
-        family="gemini-3",
-        context_window_tokens=1_048_576,
-        max_output_tokens=65_536,
-        pricing=ModelPricing(
-            input_cost_per_m=2.00,
-            output_cost_per_m=12.00,
-            pricing_effective_date="2026-09-01",
-            pricing_verification_date="2026-10-27",
-            source_url="https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro"
-        ),
-        tokenizer_name="gemini_256k_bpe_calibrated",
-        capabilities=["complex_reasoning", "code_generation", "multimodal", "long_context"],
-        strengths=["Preview frontier reasoning tier", "1M token context capacity"],
-        description="Preview release alias for Gemini 3.1 Pro. Excluded from default stable recommendations.",
-        lifecycle_status=LifecycleStatus.PREVIEW,
-        source_url="https://ai.google.dev/gemini-api/docs/models#gemini-3.1-pro",
-        verification_date="2026-10-27",
-        last_audit_date="2026-10-27"
+        last_audit_date="2026-10-28"
     ),
     "gemini-2.5-pro": ModelMetadata(
         model_id="gemini-2.5-pro",
@@ -1285,9 +1239,9 @@ HISTORICAL_MODELS: Dict[str, ModelMetadata] = {
         lifecycle_status=LifecycleStatus.RETIRED,
         source_url="https://docs.x.ai/docs/deprecations",
         verification_date="2026-04-15",
-        last_audit_date="2026-10-27",
+        last_audit_date="2026-10-28",
         retirement_date="2026-04-15",
-        replacement_model_id="grok-4-7"
+        replacement_model_id="grok-4.7"
     ),
     "grok-2-vision": ModelMetadata(
         model_id="grok-2-vision",
@@ -1311,9 +1265,63 @@ HISTORICAL_MODELS: Dict[str, ModelMetadata] = {
         lifecycle_status=LifecycleStatus.RETIRED,
         source_url="https://docs.x.ai/docs/deprecations",
         verification_date="2026-04-15",
-        last_audit_date="2026-10-27",
+        last_audit_date="2026-10-28",
         retirement_date="2026-04-15",
-        replacement_model_id="grok-4-7"
+        replacement_model_id="grok-4.7"
+    ),
+
+    # Legacy DeepSeek Models
+    "deepseek-chat": ModelMetadata(
+        model_id="deepseek-chat",
+        display_name="DeepSeek-V3 (Retired)",
+        provider="deepseek",
+        family="deepseek-v3",
+        context_window_tokens=64_000,
+        max_output_tokens=8_000,
+        pricing=ModelPricing(
+            input_cost_per_m=0.14,
+            output_cost_per_m=0.28,
+            pricing_effective_date="2024-12-26",
+            pricing_verification_date="2026-07-24",
+            is_stale=True,
+            source_url="https://api-docs.deepseek.com/quick_start/pricing"
+        ),
+        tokenizer_name="deepseek_calibrated_heuristic",
+        capabilities=["code_generation", "general_instruction", "data_analysis", "structured_output"],
+        strengths=["Historical open-weights MoE milestone"],
+        description="Retired legacy foundation model. Superseded by DeepSeek-Flash.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://api-docs.deepseek.com/quick_start/pricing",
+        verification_date="2026-07-24",
+        last_audit_date="2026-10-28",
+        retirement_date="2026-07-24",
+        replacement_model_id="deepseek-flash"
+    ),
+    "deepseek-reasoner": ModelMetadata(
+        model_id="deepseek-reasoner",
+        display_name="DeepSeek-R1 (Retired)",
+        provider="deepseek",
+        family="deepseek-r1",
+        context_window_tokens=64_000,
+        max_output_tokens=8_000,
+        pricing=ModelPricing(
+            input_cost_per_m=0.55,
+            output_cost_per_m=2.19,
+            pricing_effective_date="2025-01-20",
+            pricing_verification_date="2026-07-24",
+            is_stale=True,
+            source_url="https://api-docs.deepseek.com/quick_start/pricing"
+        ),
+        tokenizer_name="deepseek_calibrated_heuristic",
+        capabilities=["complex_reasoning", "stem_reasoning", "code_generation"],
+        strengths=["Historical open-weights RL reasoning pioneer"],
+        description="Retired legacy reasoning model. Superseded by DeepSeek-V4-Pro.",
+        lifecycle_status=LifecycleStatus.RETIRED,
+        source_url="https://api-docs.deepseek.com/quick_start/pricing",
+        verification_date="2026-07-24",
+        last_audit_date="2026-10-28",
+        retirement_date="2026-07-24",
+        replacement_model_id="deepseek-v4-pro"
     )
 }
 
@@ -1705,24 +1713,32 @@ class ModelRegistry:
     Maintains strict category separation and lifecycle eligibility.
     """
 
+    MODEL_ALIASES: Dict[str, str] = {
+        "grok-4-7": "grok-4.7",
+        "grok-4-3": "grok-4.3",
+        "gemini-3.1-pro": "gemini-3.1-pro-preview",
+    }
+
     def __init__(self):
         self._models: Dict[str, ModelMetadata] = dict(DEFAULT_MODELS)
         self._ides: Dict[str, IDEProductMetadata] = dict(DEFAULT_IDES)
         self._app_builders: Dict[str, AppBuilderMetadata] = dict(DEFAULT_APP_BUILDERS)
 
     def get_model(self, item_id: str) -> Optional[Union[ModelMetadata, IDEProductMetadata, AppBuilderMetadata]]:
-        """Retrieves an item by ID across all categories."""
-        if item_id in self._models:
-            return self._models[item_id]
-        if item_id in self._ides:
-            return self._ides[item_id]
-        if item_id in self._app_builders:
-            return self._app_builders[item_id]
+        """Retrieves an item by ID across all categories, resolving aliases."""
+        canonical_id = self.MODEL_ALIASES.get(item_id, item_id)
+        if canonical_id in self._models:
+            return self._models[canonical_id]
+        if canonical_id in self._ides:
+            return self._ides[canonical_id]
+        if canonical_id in self._app_builders:
+            return self._app_builders[canonical_id]
         return None
 
     def get_foundation_model(self, model_id: str) -> Optional[ModelMetadata]:
-        """Retrieves a foundation model by ID regardless of lifecycle status."""
-        return self._models.get(model_id)
+        """Retrieves a foundation model by ID regardless of lifecycle status, resolving aliases."""
+        canonical_id = self.MODEL_ALIASES.get(model_id, model_id)
+        return self._models.get(canonical_id)
 
     def get_ide(self, product_id: str) -> Optional[IDEProductMetadata]:
         """Retrieves an IDE assistant by ID."""

@@ -1668,7 +1668,7 @@ def cli_inspect_catalogue(colors: Colors) -> None:
         print("=" * 80)
 
         print("Select category to inspect:")
-        print("  [1] Foundation Models (22 active GA, 6 preview/unverified, 18 historical/retired)")
+        print("  [1] Foundation Models (21 active GA, 5 preview/unverified, 20 historical/retired)")
         print("  [2] IDE Coding Assistants (4 verified products)")
         print("  [3] AI App Builders (4 verified platforms)")
         print("  [0] Back to Main Menu")

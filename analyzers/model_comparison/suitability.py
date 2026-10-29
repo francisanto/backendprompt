@@ -68,12 +68,12 @@ def get_suitability_breakdown(
     )
     if is_coding_task:
         if model.model_id in [
-            "gpt-6-astra", "gpt-5.5", "gpt-5.5-pro", "claude-opus-5-5", "claude-sonnet-5-5",
+            "gpt-6-astra", "gpt-5.5", "gpt-5.5-pro", "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5",
             "gemini-4-argon", "deepseek-v4-pro", "deepseek-reasoner", "claude-3-7-sonnet", "o1"
         ]:
             code_score = 0.98
         elif model.model_id in [
-            "gpt-6-sol", "gemini-3.8-flash", "gemini-3.7-flash", "grok-4-7",
+            "gpt-6-sol", "gemini-3.8-flash", "gemini-3.7-flash", "grok-4.7", "grok-4-7",
             "deepseek-chat", "deepseek-flash", "o3-mini", "claude-3-5-sonnet"
         ]:
             code_score = 0.96
@@ -83,7 +83,7 @@ def get_suitability_breakdown(
         ]:
             code_score = 0.94
         elif model.model_id in [
-            "gemini-3.5-flash", "grok-4-3", "gemini-2.0-flash", "gpt-4-turbo", "gemini-2.5-pro"
+            "gemini-3.5-flash", "grok-4.3", "grok-4-3", "gemini-2.0-flash", "gpt-4-turbo", "gemini-2.5-pro"
         ]:
             code_score = 0.91
         elif model.model_id in [
@@ -104,7 +104,7 @@ def get_suitability_breakdown(
     is_flagship = model.model_id in [
         "gpt-6-astra", "gpt-6-sol", "gpt-5.5", "gpt-5.5-pro", "gpt-5",
         "gemini-4-argon", "gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.1-pro-preview", "gemini-3.1-pro",
-        "claude-opus-5-5", "claude-sonnet-5-5", "grok-4-7", "deepseek-v4-pro", "deepseek-reasoner",
+        "claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5", "grok-4.7", "grok-4-7", "deepseek-v4-pro", "deepseek-reasoner",
         "claude-3-7-sonnet", "claude-3-5-sonnet", "o1", "o3-mini", "gpt-4o",
         "gemini-1.5-pro", "claude-3-opus", "deepseek-chat", "grok-2",
         "gemini-2.5-pro", "grok-3", "gpt-4-turbo"
@@ -112,7 +112,7 @@ def get_suitability_breakdown(
 
     is_lightweight = model.model_id in [
         "gpt-5-mini", "gpt-6-luna", "gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash",
-        "claude-haiku-5-5", "grok-4-3", "deepseek-flash",
+        "claude-haiku-5-5", "grok-4.3", "grok-4-3", "deepseek-flash",
         "gpt-4o-mini", "gemini-2.0-flash", "gemini-2.0-flash-lite", "claude-3-5-haiku",
         "gemini-1.5-flash", "o1-mini", "gemini-2.5-flash", "grok-3-mini", "gpt-3.5-turbo"
     ] or "fast_inference" in capabilities or "high_speed" in capabilities
